@@ -858,6 +858,37 @@ var CPTabViewItemsKey               = "CPTabViewItemsKey",
 
 @end
 
+#pragma mark -
+
+@implementation CPTabView (CSSTheming)
+
+#pragma mark Override
+
+- (void)_setThemeIncludingDescendants:(CPTheme)aTheme
+{
+    [self setTheme:aTheme];
+    [[self subviews] makeObjectsPerformSelector:@selector(_setThemeIncludingDescendants:) withObject:aTheme];
+
+    // Items must also perform this (without this, only the selected item does)
+
+    for (var i = 0, allItems = [self items], count = allItems.length; i < count; i++)
+        if (allItems[i] != _selectedTabViewItem)
+            [[allItems[i] view] _setThemeIncludingDescendants:aTheme];
+}
+
+@end
+
+@implementation CPTabView (ConstraintBasedLayout)
+
++ (BOOL)refusesConstraintBasedLayout
+{
+    return YES;
+}
+
+@end
+
+#pragma mark -
+
 @implementation _CPTabViewBox : CPBox
 {
     CPTabView _tabView @accessors(property=tabView);
@@ -953,4 +984,3 @@ var CPTabViewItemsKey               = "CPTabViewItemsKey",
 }
 
 @end
-

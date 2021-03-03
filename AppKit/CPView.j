@@ -983,12 +983,29 @@ var CPViewHighDPIDrawingEnabled = YES;
     // The local engine is created on the top level view only.
     if (_localEngine !== nil)
     {
-        if ([_window _shouldEngageAutolayout])
+        var refuseAutolayout = [self _isDescendantOfViewPassingTest:function(aView, idx) {
+            return [[aView class] refusesConstraintBasedLayout];
+        }];
+
+        if (!refuseAutolayout && [_window _shouldEngageAutolayout])
             [self _promoteLocalEngineToWindowEngine];
 
         // TODO: if we don't enable autolayout, local engine variables should be reseted.
         _localEngine = nil;
     }
+}
+
+- (BOOL)_isDescendantOfViewPassingTest:(Function)testFunction
+{
+    var view = self;
+
+    do
+    {
+        if (testFunction(view))
+            return YES;
+    } while(view = [view superview])
+
+    return NO;
 }
 
 /*!

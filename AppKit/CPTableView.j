@@ -6110,6 +6110,11 @@ Your delegate can implement this method to avoid subclassing the tableview to ad
 
 @implementation CPTableView (ConstraintBasedLayout)
 
++ (BOOL)refusesConstraintBasedLayout
+{
+    return YES;
+}
+
 - (CGSize)intrinsicContentSize
 {
     var min_size = [self _minimumFrameSize];
@@ -6420,6 +6425,11 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 
     CPTextField _textField  @accessors(property=textField);
     CPImageView _imageView  @accessors(property=imageView);
+}
+
++ (BOOL)refusesConstraintBasedLayout
+{
+    return YES;
 }
 
 - (void)awakeFromCib
