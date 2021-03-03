@@ -49,6 +49,8 @@ var CPThemesByName          = { },
 + (void)setDefaultTheme:(CPTheme)aTheme
 {
     CPThemeDefaultTheme = aTheme;
+
+    [CPFont initializeSystemFontFromTheme:aTheme];
 }
 
 + (CPTheme)defaultTheme
@@ -812,6 +814,8 @@ CPThemeStateKeyWindow           = CPThemeState("keyWindow");
 CPThemeStateControlSizeRegular  = CPThemeState("controlSizeRegular");
 CPThemeStateControlSizeSmall    = CPThemeState("controlSizeSmall");
 CPThemeStateControlSizeMini     = CPThemeState("controlSizeMini");
+CPThemeStateAlternateState      = CPThemeState("alternate");
+CPThemeStateComposedControl     = CPThemeState("composed");
 
 CPThemeStateNormalString        = String(CPThemeStateNormal);
 

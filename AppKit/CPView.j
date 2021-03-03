@@ -2156,7 +2156,7 @@ var CPViewHighDPIDrawingEnabled = YES;
 
 #if PLATFORM(DOM)
     if (_backgroundType === BackgroundCSSStyling)
-        [_backgroundColor restorePreviousCSSState:@ref(_cssStylePreviousState) forDOMElement:_DOMElement];
+        [CPColor restorePreviousCSSState:@ref(_cssStylePreviousState) forDOMElement:_DOMElement];
 
     var patternImage = [_backgroundColor patternImage],
         colorExists = _backgroundColor && ([_backgroundColor patternImage] || [_backgroundColor alphaComponent] > 0.0),
@@ -3659,6 +3659,11 @@ setBoundsOrigin:
 #endif
 }
 
+- (BOOL)isCSSBased
+{
+    return [[CPTheme defaultTheme] valueForAttributeWithName:@"css-based" forClass:CPView];
+}
+
 @end
 
 
@@ -3818,7 +3823,6 @@ var CPAppearanceVibrantDark = [CPAppearance appearanceNamed:CPAppearanceNameVibr
 
 - (void)_updateTrackingAreasWithRecursion:(BOOL)shouldCallRecursively
 {
-    _inhibitUpdateTrackingAreas = YES;
     [self _updateTrackingAreasWithRecursion:shouldCallRecursively withReferencingSuperViewVisibleRect:[_superview visibleRect]];
 }
 

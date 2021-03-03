@@ -49,6 +49,15 @@
     return self;
 }
 
+- (void)awakeFromNib
+{
+    // First, let CPView do its magic
+    [super awakeFromNib];
+
+    // We have to call _adjustNib2CibSize here as during NS_initWithCoder, view is not totally loaded.
+    [self _adjustNib2CibSize];
+}
+
 @end
 
 @implementation NSTabView : CPTabView
