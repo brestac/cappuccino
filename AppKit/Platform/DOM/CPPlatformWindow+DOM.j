@@ -831,7 +831,7 @@ _CPPlatformWindowWillCloseNotification = @"_CPPlatformWindowWillCloseNotificatio
             if (keyCode === CPKeyCodes.CAPS_LOCK)
             {
                 _capsLockActive = NO;
-                
+
                 // Make sure the caps lock flag is cleared in modifierFlags
                 modifierFlags &= ~CPAlphaShiftKeyMask;
             }
@@ -1050,7 +1050,7 @@ _CPPlatformWindowWillCloseNotification = @"_CPPlatformWindowWillCloseNotificatio
             windowCount = windows.length;
 
         while (windowCount--)
-            [windows[windowCount] resizeWithOldPlatformWindowSize:oldSize];
+            [windows[windowCount] resizeEventWithOldPlatformWindowSize:oldSize];
     }
 
     [[CPNotificationCenter defaultCenter] postNotificationName:CPApplicationDidChangeScreenParametersNotification
@@ -1224,7 +1224,7 @@ _CPPlatformWindowWillCloseNotification = @"_CPPlatformWindowWillCloseNotificatio
                     return;
             }
         }
-        
+
         // cancel other touch cases preventively
 
         if (aDOMEvent.preventDefault)

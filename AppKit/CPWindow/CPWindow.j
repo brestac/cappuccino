@@ -274,6 +274,7 @@ var CPWindowActionMessageKeys = [
     BOOL                                _needsLayout @accessors;
     BOOL                                _layoutLock @accessors;
     CPArray                             _windowViewSizeVariables;
+    BOOL                                _isResizingPlatformWindow;
 
     BOOL                                _inhibitUpdateTrackingAreas;    // Used by the CPView when updating tracking areas
 }
@@ -450,6 +451,7 @@ CPTexturedBackgroundWindowMask
         _layoutEngine = nil;
         _windowViewSizeVariables = nil;
         _needsSolving = NO;
+        _isResizingPlatformWindow = NO;
 
         [self setShowsResizeIndicator:_styleMask & CPResizableWindowMask];
 
@@ -2147,7 +2149,7 @@ CPTexturedBackgroundWindowMask
 
 - (BOOL)_inLiveResize
 {
-    return [_windowView _isTracking];
+    return [_windowView _isTracking] || _isResizingPlatformWindow;
 }
 
 /*!
@@ -3685,6 +3687,16 @@ var keyViewComparator = function(lhs, rhs, context)
 
 
 @implementation CPWindow (BridgeSupport)
+
+/*
+    @ignore
+*/
+- (void)resizeEventWithOldPlatformWindowSize:(CGSize)aSize
+{
+    _isResizingPlatformWindow = YES;
+    [self resizeWithOldPlatformWindowSize:aSize];
+    _isResizingPlatformWindow = NO;
+}
 
 /*
     @ignore
