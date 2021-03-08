@@ -574,11 +574,6 @@ CPBelowBottom = 6;
         [super setValue:aValue forKey:aKey];
 }
 
-- (BOOL)_separatorBoxIsHorizontal
-{
-    return CGRectGetHeight([self bounds]) === 5.0;
-}
-
 - (void)drawRect:(CGRect)rect
 {
     if ([self isCSSBased] && (_boxType !== CPBoxCustom))
@@ -793,6 +788,11 @@ CPBelowBottom = 6;
 #pragma mark -
 
 @implementation CPBox (ConstraintBasedLayout)
+
+- (BOOL)_separatorBoxIsHorizontal
+{
+    return CGRectGetHeight([self bounds]) === 5.0;
+}
 
 - (CGSize)intrinsicContentSize
 {
