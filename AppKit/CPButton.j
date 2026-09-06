@@ -174,6 +174,7 @@ CPButtonImageOffset   = 3.0;
     return @{
             @"image": [CPNull null],
             @"image-offset": 0.0,
+            @"image-vertical-offset": 0.0,
             @"bezel-inset": CGInsetMakeZero(),
             @"content-inset": CGInsetMakeZero(),
             @"bezel-color": [CPNull null],
@@ -219,8 +220,8 @@ CPButtonImageOffset   = 3.0;
     [self setButtonType:CPMomentaryPushInButton];
 }
 
-#pragma mark -
-#pragma mark Control Size
+// MARK: -
+// MARK: Control Size
 
 - (void)setControlSize:(CPControlSize)aControlSize
 {
@@ -231,7 +232,7 @@ CPButtonImageOffset   = 3.0;
 }
 
 
-#pragma mark -
+// MARK: -
 
 // Setting the state
 /*!
@@ -382,6 +383,9 @@ CPButtonImageOffset   = 3.0;
         _bezelState = CPThemeStateNormal;
 
     [self setValue:anImage forThemeAttribute:@"image" inState:_bezelState];
+    [self setValue:anImage forThemeAttribute:"image" inState:_bezelState];
+    // if we omit this, images will disappear as soon as the button becomes disabled
+    [self setValue:anImage forThemeAttribute:"image" inState:_bezelState.and(CPThemeStateDisabled)];
 }
 
 - (CPImage)image
@@ -805,6 +809,8 @@ CPButtonImageOffset   = 3.0;
     [contentView setImage:image];
 
     [contentView setImageOffset:[self valueForThemeAttribute:@"image-offset" inState:contentVisualState]];
+    [contentView setImageOffset:[self valueForThemeAttribute:"image-offset" inState:contentVisualState]];
+    [contentView setImageVerticalOffset:[self valueForThemeAttribute:"image-vertical-offset" inState:contentVisualState]];
 
     [contentView setFont:[self font]];
     [contentView setTextColor:[self valueForThemeAttribute:@"text-color" inState:contentVisualState]];
@@ -992,7 +998,11 @@ CPButtonImageOffset   = 3.0;
     _bezelStyle = aBezelStyle;
 
     if (_bezelState && newState)
+    {
+        if (currentState)
+            _bezelState =_bezelState.without(currentState);
         _bezelState = _bezelState.and(newState);
+    }
     else
         _bezelState = newState || CPThemeStateNormal;
 

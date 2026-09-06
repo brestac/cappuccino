@@ -32,6 +32,8 @@
 {
     if (self = [super NS_initWithCoder:aCoder])
     {
+        [self _init];
+
         _textContainer = [aCoder decodeObjectForKey:@"NSTextContainer"];
 
         [self setEditable:[aTextViewSharedData isEditable]];
@@ -44,6 +46,14 @@
         [self setInsertionPointColor:[aTextViewSharedData insertionColor]];
         [self setSelectedTextAttributes:[aTextViewSharedData selectedTextAttributes]];
         [[self textContainer] setWidthTracksTextView:YES];
+
+        if ([aCoder containsValueForKey:@"NSMaxSize"])
+            _maxSize = [aCoder decodeSizeForKey:@"NSMaxSize"];
+
+        var tvFlags = [aCoder decodeIntForKey:@"NSTVFlags"];
+
+        _isHorizontallyResizable = (tvFlags & 0x00000001) ? YES : NO;
+        _isVerticallyResizable = (tvFlags & 0x00000002) ? YES : NO;
     }
 
     return self;

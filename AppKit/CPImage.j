@@ -31,8 +31,10 @@
 
 @import "CGGeometry.j"
 @import "CPCompatibility.j"
+@import "CPGraphicsContext.j"
 
 @class CPColor
+@global document
 
 @protocol CPImageDelegate <CPObject>
 
@@ -515,8 +517,8 @@ function CPAppKitImage(aFilename, aSize)
 
 @end
 
-#pragma mark -
-#pragma mark CSS Theming
+// MARK: -
+// MARK: CSS Theming
 
 // The code below adds support for CSS theming with 100% compatibility with current theming system.
 // The idea is to extend CPImage (and CPColor) with CSS components and adapt low level UI components to
@@ -736,7 +738,7 @@ var CPImageCSSDictionaryKey       = @"CPImageCSSDictionaryKey",
     CPImageCSSBeforeDictionaryKey = @"CPImageCSSBeforeDictionaryKey",
     CPImageCSSAfterDictionaryKey  = @"CPImageCSSAfterDictionaryKey";
 
-#pragma mark -
+// MARK: -
 
 @implementation CPImage (CPCoding)
 
@@ -773,7 +775,45 @@ var CPImageCSSDictionaryKey       = @"CPImageCSSDictionaryKey",
 
 @end
 
-#pragma mark -
+// MARK: -
+// MARK: Drawing
+
+@implementation CPImage (Drawing)
+
+- (void)drawAtPoint:(CGPoint)point fromRect:(CPRect)fromRect operation:(CGBlendMode)op fraction:(float)delta
+{
+    if (_loadStatus !== CPImageLoadStatusCompleted)
+        return;
+
+    var context = [CPGraphicsContext currentContext].graphicsPort;
+
+    if (!context)
+        return;
+
+    CGContextSaveGState(context);
+
+    CGContextSetBlendMode(context, op);
+    CGContextSetAlpha(context, delta);
+
+    context.drawImage(
+        _image,
+        fromRect.origin.x,
+        fromRect.origin.y,
+        fromRect.size.width,
+        fromRect.size.height,
+        point.x,
+        point.y,
+        fromRect.size.width,
+        fromRect.size.height
+    );
+
+    CGContextRestoreGState(context);
+}
+
+@end
+
+
+// MARK: -
 
 @implementation _CPMaterialIconImage : CPImage
 {
@@ -933,7 +973,7 @@ var CPImageCSSDictionaryKey       = @"CPImageCSSDictionaryKey",
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPThreePartImage : CPObject
 {
@@ -1076,7 +1116,7 @@ var CPNinePartImageImageSlicesKey   = @"CPNinePartImageImageSlicesKey";
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPImage (Duplication)
 

@@ -124,10 +124,26 @@ var _CPCibCustomViewClassNameKey = @"_CPCibCustomViewClassNameKey";
 
         [view setTranslatesAutoresizingMaskIntoConstraints:[self translatesAutoresizingMaskIntoConstraints]];
 
+        // Trying to fix not ready view bug (or running condition)
+        view._appearance = self._appearance;
+        view._theme      = self._theme;
+
+        if (view._themeState == CPThemeStateNormal)
+            view._themeState = self._themeState;
+
+        view._themeAttributes = self._themeAttributes;
+        view._themeClass      = [theClass themeClass];
+
+        [view _loadThemeAttributes];
+
         [_superview replaceSubview:self with:view];
         _replacementView = view;
 
-        [view setBackgroundColor:[self backgroundColor]];
+        var backgroundColor = [self backgroundColor];
+
+        if (backgroundColor)
+            [view setBackgroundColor:backgroundColor];
+
         [view _setInternalConstraints:[self _internalConstraints]];
 
         [view _setHuggingPriorities:[self _huggingPriorities]];

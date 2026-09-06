@@ -875,8 +875,9 @@
 
 - (void)testObservationDuringSetSelectionIndexes
 {
-    var arrayController = [self arrayController],
-        newContent = [self setupObservationFixture];
+    var arrayController = [self arrayController];
+
+    [self setupObservationFixture];
 
     var newSelection = [CPIndexSet indexSetWithIndex:2];
     [arrayController setSelectionIndexes:newSelection];
@@ -1124,8 +1125,14 @@
 /*!
     Test the speed of set an big array when the old was an empty.
     Also test the speed when an empty array is set and the old is an big
+
+    Disabled: This method is a macro-benchmark lacking functional assertions.
+    Absolute wall-clock timings are non-deterministic across disparate CI environments
+    and pollute standard test output. Actionable performance tracking requires a
+    dedicated metrics harness. Retained only for ad-hoc local profiling.
 */
-- (void)testPerformance
+
+- (void)disabled_testPerformance
 {
     [self initControllerWithContentBinding];
 
@@ -1142,6 +1149,7 @@
     [self setItemsArray:[]];
     var ddd = new Date();
 
+    console.log();
     CPLog.warn("\n" + [self className] + " Performance tests");
     CPLog.warn("EmptyArray -> BigArray (" + [bigArray count] + "): " + (dd - d) + "ms.");
     CPLog.warn("BigArray (" + [bigArray count] + ") -> EmptyArray: " + (ddd - dd) + "ms.");

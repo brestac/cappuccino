@@ -312,6 +312,12 @@ var AFFINITY = 5;
     if (!trackRect || CGRectIsEmpty(trackRect))
         trackRect = bounds;
 
+    if (_allowsTickMarkValuesOnly)
+    {
+        [self closestTickMarkValueToValue:[self doubleValue]]; // we only need the side effect …
+        _currentTickMarkSegment = _closestTickMarkIndex;
+    }
+
     if (_isCircular)
     {
         var angle  = 3 * PI_2 - (1.0 - [self doubleValue] - _minValue) / (_maxValue - _minValue) * PI2,
@@ -1054,10 +1060,6 @@ var AFFINITY = 5;
     [self setNeedsDisplay:YES];
 }
 
-#pragma mark -
-
-@end
-
 @implementation CPSlider (ConstraintBasedLayout)
 
 - (CGSize)_contentHuggingPriorities
@@ -1095,7 +1097,6 @@ var AFFINITY = 5;
 }
 */
 @end
-
 var CPSliderMinValueKey                 = "CPSliderMinValueKey",
     CPSliderMaxValueKey                 = "CPSliderMaxValueKey",
     CPSliderAltIncrValueKey             = "CPSliderAltIncrValueKey",

@@ -20,11 +20,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-@import "CPCoder.j"
 @import "CPObject.j"
 @import "CPString.j"
 
-@class CPString
+@class CPCoder
 
 CPInvalidArgumentException          = @"CPInvalidArgumentException";
 CPUnsupportedMethodException        = @"CPUnsupportedMethodException";
@@ -222,13 +221,40 @@ var CPExceptionNameKey      = @"CPExceptionNameKey",
 
 // toll-free bridge Error to CPException
 // [CPException alloc] uses an objj_exception, which is a subclass of Error
-Error.prototype.isa = CPException;
-Error.prototype._userInfo = null;
+if (Error.prototype.isa !== CPException)
+{
+    Object.defineProperties(Error.prototype,
+    {
+        isa:
+        {
+            value: CPException,
+            enumerable: false,
+            writable: true
+        }
+    });
+}
+if (Error.prototype._userInfo !== null)
+{
+    Object.defineProperties(Error.prototype,
+    {
+        _userInfo:
+        {
+            value: null,
+            enumerable: false,
+            writable: true
+        }
+    });
+}
 
 [CPException initialize];
 
-#define METHOD_CALL_STRING()\
-    ((class_isMetaClass(anObject.isa) ? "+" : "-") + "[" + [anObject className] + " " + aSelector + "]: ")
+// MARK: - Exception Utilities
+
+function _CPMethodCallString(anObject, aSelector)
+{
+    var prefix = class_isMetaClass(anObject.isa) ? "+" : "-";
+    return prefix + "[" + [anObject className] + " " + aSelector + "]: ";
+}
 
 function _CPRaiseInvalidAbstractInvocation(anObject, aSelector)
 {
@@ -238,13 +264,13 @@ function _CPRaiseInvalidAbstractInvocation(anObject, aSelector)
 function _CPRaiseInvalidArgumentException(anObject, aSelector, aMessage)
 {
     [CPException raise:CPInvalidArgumentException
-                reason:METHOD_CALL_STRING() + aMessage];
+                reason:_CPMethodCallString(anObject, aSelector) + aMessage];
 }
 
 function _CPRaiseRangeException(anObject, aSelector, anIndex, aCount)
 {
     [CPException raise:CPRangeException
-                reason:METHOD_CALL_STRING() + "index (" + anIndex + ") beyond bounds (" + aCount + ")"];
+                reason:_CPMethodCallString(anObject, aSelector) + "index (" + anIndex + ") beyond bounds (" + aCount + ")"];
 }
 
 function _CPReportLenientDeprecation(/*Class*/ aClass, /*SEL*/ oldSelector, /*SEL*/ newSelector)

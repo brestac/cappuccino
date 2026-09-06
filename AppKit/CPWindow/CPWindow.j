@@ -186,6 +186,7 @@ var CPWindowActionMessageKeys = [
     BOOL                                _constrainsToUsableScreen;
     unsigned                            _shadowStyle;
     BOOL                                _showsResizeIndicator;
+    BOOL                                _releasedWhenClosed @accessors(property=releasedWhenClosed);
 
     int                                 _positioningMask;
     CGRect                              _positioningScreenRect;
@@ -278,6 +279,8 @@ var CPWindowActionMessageKeys = [
 
     BOOL                                _inhibitUpdateTrackingAreas;    // Used by the CPView when updating tracking areas
 }
+
+@global document
 
 + (Class)_binderClassForBinding:(CPString)aBinding
 {
@@ -381,7 +384,6 @@ CPTexturedBackgroundWindowMask
 
         // DEBUG - CAN BE REMOVED
         [_windowView setIdentifier:@"windowView"];
-
         // CSS Styling
 #if PLATFORM(DOM)
         var radius;
@@ -1314,6 +1316,10 @@ CPTexturedBackgroundWindowMask
     [_contentView setAutoresizingMask:CPViewWidthSizable | CPViewHeightSizable];
     [_windowView addSubview:_contentView];
 
+    // The window view manages the exact layout of the content view (e.g. offsetting for the toolbar).
+    if ([_windowView respondsToSelector:@selector(tile)])
+        [_windowView tile];
+
     /*
         If the initial first responder has been set to something other than
         the window, set it to the window because it will no longer be valid.
@@ -1952,6 +1958,11 @@ CPTexturedBackgroundWindowMask
     // CPLeftMouseDown is needed for window moving and resizing to work.
     // CPMouseMoved is needed for rollover effects on title bar buttons.
 
+    // ignore events that happen during open / close animations
+    // not ignoring these would cause the app to freeze thereafter
+    if (sheet && (_sheetContext["isClosing"] || _sheetContext["isOpening"]))
+        return;
+
     if (sheet && _sheetContext["isAttached"])
     {
         switch (type)
@@ -1990,7 +2001,8 @@ CPTexturedBackgroundWindowMask
             return [[self firstResponder] keyUp:anEvent];
 
         case CPKeyDown:
-            if ([anEvent charactersIgnoringModifiers] === CPTabCharacter)
+            if ([anEvent charactersIgnoringModifiers] === CPTabCharacter &&
+                !([anEvent modifierFlags] & (CPAlternateKeyMask | CPCommandKeyMask)))
             {
                 if ([anEvent modifierFlags] & CPShiftKeyMask)
                     [self selectPreviousKeyView:self];
@@ -2586,6 +2598,9 @@ CPTexturedBackgroundWindowMask
     [_parentWindow removeChildWindow:self];
     [self _orderOutRecursively:NO];
     [self _detachFromChildrenClosing:!_parentWindow];
+
+    if (_releasedWhenClosed)
+        [_contentView _releaseRecursively];
 }
 
 - (void)_detachFromChildrenClosing:(BOOL)shouldCloseChildren
@@ -4506,7 +4521,7 @@ var interpolate = function(fromValue, toValue, progress)
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPWindow (CSSTheming)
 
@@ -4517,7 +4532,7 @@ var interpolate = function(fromValue, toValue, progress)
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPWindow (ConstraintBasedLayout)
 

@@ -34,7 +34,7 @@
     SEL     _predicateAction @accessors(property=action);
 }
 
-#pragma mark public methods
+// MARK: public methods
 /*!
     @ingroup appkit
     @class CPPredicateEditor
@@ -251,7 +251,7 @@
     return tree;
 }
 
-#pragma mark Set the Predicate
+// MARK: Set the Predicate
 
 - (void)setObjectValue:(id)objectValue
 {
@@ -269,6 +269,8 @@
     _currentAnimation = nil;
     _sendAction = NO;
 
+    var rows = [];
+
     if (predicate != nil)
     {
         if ((_nestingMode == CPRuleEditorNestingModeSimple || _nestingMode == CPRuleEditorNestingModeCompound)
@@ -276,9 +278,12 @@
             predicate = [[CPCompoundPredicate alloc] initWithType:[self _compoundPredicateTypeForRootRows] subpredicates:[CPArray arrayWithObject:predicate]];
 
         var row = [self _rowObjectFromPredicate:predicate];
+        
         if (row != nil)
-            [_boundArrayOwner setValue:[CPArray arrayWithObject:row] forKey:_boundArrayKeyPath];
+            [rows addObject:row];
     }
+
+    [_boundArrayOwner setValue:rows forKey:_boundArrayKeyPath];
 
     [self setAnimation:animation];
 }
@@ -369,7 +374,7 @@
     return row;
 }
 
-#pragma mark Get the predicate
+// MARK: Get the predicate
 
 - (void)_updatePredicate
 {
@@ -447,7 +452,7 @@
     return CPAndPredicateType;
 }
 
-#pragma mark Control delegate
+// MARK: Control delegate
 
 - (void)_sendRuleAction
 {
@@ -482,7 +487,7 @@
 }
 */
 
-#pragma mark RuleEditor delegate methods
+// MARK: RuleEditor delegate methods
 
 - (int)_queryNumberOfChildrenOfItem:(id)rowItem withRowType:(CPRuleEditorRowType)type
 {

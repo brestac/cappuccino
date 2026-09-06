@@ -82,18 +82,26 @@
 - (void)test_objectAtIndex_
 {
     var arrayClass = [[self class] arrayClass],
-        array = [arrayClass array];
+        array = [arrayClass array],
+        e;
 
-    [self assertThrows:function () { [array objectAtIndex:-1] }];
-    [self assertThrows:function () { [array objectAtIndex:0] }];
+    e = [self assertThrows:function () { [array objectAtIndex:-1] }];
+    [self assert:CPRangeException equals:[e name]];
+
+    e = [self assertThrows:function () { [array objectAtIndex:0] }];
+    [self assert:CPRangeException equals:[e name]];
 
     var array = [arrayClass arrayWithObjects:0, 1, 2];
 
-    [self assertThrows:function () { [array objectAtIndex:-1] }];
+    e = [self assertThrows:function () { [array objectAtIndex:-1] }];
+    [self assert:CPRangeException equals:[e name]];
+
     [self assert:[array objectAtIndex:0] same:0];
     [self assert:[array objectAtIndex:1] same:1];
     [self assert:[array objectAtIndex:2] same:2];
-    [self assertThrows:function () { [array objectAtIndex:3] }];
+
+    e = [self assertThrows:function () { [array objectAtIndex:3] }];
+    [self assert:CPRangeException equals:[e name]];
 }
 
 - (void)test_objectsAtIndexes_
@@ -104,20 +112,29 @@
     }
 
     var arrayClass = [[self class] arrayClass],
-        array = [arrayClass array];
+        array = [arrayClass array],
+        e;
 
-    [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(0, 1)] }];
+    e = [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(0, 1)] }];
+    [self assert:CPRangeException equals:[e name]];
 
     var array = [arrayClass arrayWithObjects:0, 1, 2];
 
     [self assert:[array objectsAtIndexes:rangeIndexes(0, 1)] equals:[0]];
     [self assert:[array objectsAtIndexes:rangeIndexes(0, 2)] equals:[0, 1]];
     [self assert:[array objectsAtIndexes:rangeIndexes(0, 3)] equals:[0, 1, 2]];
-    [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(0, 4)] }];
+
+    e = [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(0, 4)] }];
+    [self assert:CPRangeException equals:[e name]];
+
     [self assert:[array objectsAtIndexes:rangeIndexes(1, 1)] equals:[1]];
     [self assert:[array objectsAtIndexes:rangeIndexes(1, 2)] equals:[1, 2]];
-    [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(1, 3)] }];
-    [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(3, 1)] }];
+
+    e = [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(1, 3)] }];
+    [self assert:CPRangeException equals:[e name]];
+
+    e = [self assertThrows:function () { [array objectsAtIndexes:rangeIndexes(3, 1)] }];
+    [self assert:CPRangeException equals:[e name]];
 }
 
 - (void)test_indexOfObject_
@@ -722,6 +739,22 @@
     }];
 }
 
+// As we have a tool-free bridges between many classes and JavaScript types by setting the isa property
+// on the type, for example Array and CPArray. Using the for...in enumeration the isa property should not
+// be included in the loop as the property is now not enumerable.
+- (void)testLoopingArrayWithForIn
+{
+    let array = @[@"a", @"b", @"c", @"d"],
+        i = 0;
+
+    for (const element in array) {
+        i = i + 1;
+        element + element; // Remove warning that the variable is never read
+    }
+
+    [self assert:i equals:4];
+}
+
 @end
 
 @implementation AlwaysEqual : CPObject
@@ -813,7 +846,7 @@
 - (id)objectAtIndex:(CPUInteger)anIndex
 {
     if (anIndex < 0 || anIndex >= [self count])
-        throw "range error";
+        [CPException raise:CPRangeException reason:"index (" + anIndex + ") beyond bounds (" + [self count] + ")"];
 
     return array[anIndex];
 }

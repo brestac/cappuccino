@@ -84,11 +84,13 @@ CPLineMovesUp = 4;
     CPLayoutManager _layoutManager          @accessors(property=layoutManager);
     CPTextView      _textView               @accessors(property=textView);
     BOOL            _inResizing;
+    BOOL            _widthTracksTextView;
+    BOOL            _heightTracksTextView;
 }
 
 
-#pragma mark -
-#pragma mark Init methods
+// MARK: -
+// MARK: Init methods
 
 - (id)initWithContainerSize:(CGSize)aSize
 {
@@ -116,8 +118,8 @@ CPLineMovesUp = 4;
     [_layoutManager addTextContainer:self];
 }
 
-#pragma mark -
-#pragma mark Setter methods
+// MARK: -
+// MARK: Setter methods
 
 - (void)setContainerSize:(CGSize)someSize
 {
@@ -139,28 +141,65 @@ CPLineMovesUp = 4;
 }
 
 // Controls whether the receiver adjusts the width of its bounding rectangle when its text view is resized.
+- (BOOL)widthTracksTextView
+{
+    return _widthTracksTextView;
+}
+
 - (void)setWidthTracksTextView:(BOOL)flag
 {
-    [_textView setPostsFrameChangedNotifications:flag];
+    if (_widthTracksTextView === flag)
+        return;
 
-    if (flag)
-    {
-        [[CPNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(textViewFrameChanged:)
-                                                     name:CPViewFrameDidChangeNotification
-                                                   object:_textView];
-    }
-    else
+    _widthTracksTextView = flag;
+    [self _updateFrameObserver];
+}
+
+// Controls whether the receiver adjusts the height of its bounding rectangle when its text view is resized.
+- (BOOL)heightTracksTextView
+{
+    return _heightTracksTextView;
+}
+
+- (void)setHeightTracksTextView:(BOOL)flag
+{
+    if (_heightTracksTextView === flag)
+        return;
+
+    _heightTracksTextView = flag;
+    [self _updateFrameObserver];
+}
+
+- (void)_updateFrameObserver
+{
+    if (_textView)
     {
         [[CPNotificationCenter defaultCenter] removeObserver:self
                                                         name:CPViewFrameDidChangeNotification
                                                       object:_textView];
+
+        var flag = _widthTracksTextView || _heightTracksTextView;
+        [_textView setPostsFrameChangedNotifications:flag];
+
+        if (flag)
+        {
+            [[CPNotificationCenter defaultCenter] addObserver:self
+                                                     selector:@selector(textViewFrameChanged:)
+                                                         name:CPViewFrameDidChangeNotification
+                                                       object:_textView];
+        }
     }
 }
 
 - (void)textViewFrameChanged:(CPNotification)aNotification
 {
-    var newSize = CGSizeMake([_textView frame].size.width, _size.height);
+    var newSize = CGSizeMake(_size.width, _size.height);
+
+    if (_widthTracksTextView)
+        newSize.width = [_textView frame].size.width;
+
+    if (_heightTracksTextView)
+        newSize.height = [_textView frame].size.height;
 
     [self setContainerSize:newSize];
 }
@@ -168,12 +207,20 @@ CPLineMovesUp = 4;
 - (void)setTextView:(CPTextView)aTextView
 {
     if (_textView)
+    {
+        [[CPNotificationCenter defaultCenter] removeObserver:self
+                                                        name:CPViewFrameDidChangeNotification
+                                                      object:_textView];
         [_textView setTextContainer:nil];
+    }
 
     _textView = aTextView;
 
     if (_textView)
+    {
+        [self _updateFrameObserver];
         [_textView setTextContainer:self];
+    }
 
     [_layoutManager textContainerChangedTextView:self];
 }
@@ -222,7 +269,9 @@ CPLineMovesUp = 4;
 
 
 var CPTextContainerSizeKey  = @"CPTextContainerSizeKey",
-    CPTextContainerLayoutManagerKey  = @"CPTextContainerLayoutManagerKey";
+    CPTextContainerLayoutManagerKey  = @"CPTextContainerLayoutManagerKey",
+    CPTextContainerWidthTracksTextViewKey  = @"CPTextContainerWidthTracksTextViewKey",
+    CPTextContainerHeightTracksTextViewKey  = @"CPTextContainerHeightTracksTextViewKey";
 
 @implementation CPTextContainer (CPCoding)
 
@@ -238,6 +287,9 @@ var CPTextContainerSizeKey  = @"CPTextContainerSizeKey",
 
         _layoutManager = [aCoder decodeObjectForKey:CPTextContainerLayoutManagerKey];
         [_layoutManager addTextContainer:self];
+
+        _widthTracksTextView = [aCoder decodeBoolForKey:CPTextContainerWidthTracksTextViewKey];
+        _heightTracksTextView = [aCoder decodeBoolForKey:CPTextContainerHeightTracksTextViewKey];
     }
 
     return self;
@@ -247,6 +299,8 @@ var CPTextContainerSizeKey  = @"CPTextContainerSizeKey",
 {
     [aCoder encodeSize:_size forKey:CPTextContainerSizeKey];
     [aCoder encodeObject:_layoutManager forKey:CPTextContainerLayoutManagerKey];
+    [aCoder encodeBool:_widthTracksTextView forKey:CPTextContainerWidthTracksTextViewKey];
+    [aCoder encodeBool:_heightTracksTextView forKey:CPTextContainerHeightTracksTextViewKey];
 }
 
 @end

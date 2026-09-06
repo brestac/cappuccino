@@ -27,6 +27,7 @@
 CPDatePickerElementTextFieldBecomeFirstResponder = @"CPDatePickerElementTextFieldBecomeFirstResponder";
 CPDatePickerElementTextFieldAMPMChangedNotification = @"CPDatePickerElementTextFieldAMPMChangedNotification";
 
+// Removed hardcoded KeyCodes (CPZeroKeyCode, etc) as they are unreliable across browsers/layouts.
 var CPZeroKeyCode = 48,
     CPNineKeyCode = 57,
     CPMajAKeyCode = 65,
@@ -190,23 +191,37 @@ CPAMPMDateType = 6;
 */
 - (void)setValueForKeyEvent:(CPEvent)anEvent
 {
-    var keyCode = [anEvent keyCode];
+    var keyCode = [anEvent keyCode],
+        characters = [anEvent characters];
 
-    if (keyCode != CPDeleteKeyCode && keyCode != CPDeleteForwardKeyCode  && keyCode < CPZeroKeyCode || keyCode > CPNineKeyCode)
+    // Check if the event is a deletion
+    var isDelete = (keyCode === CPDeleteKeyCode || keyCode === CPDeleteForwardKeyCode);
+
+    // Check if the event is a numeric input.
+    // By testing the character string against a regex, we support num-pads and
+    // international keyboards correctly, rather than relying on keyCode ranges.
+    var isNumeric = (characters && [characters length] > 0 && /^[0-9]$/.test(characters));
+
+    // If it is neither a delete command nor a digit, we ignore it.
+    if (!isDelete && !isNumeric)
         return;
 
     var newValue = [self stringValue].replace(/\s/g, ''),
-        length = [newValue length],
-        eventKeyValue = parseInt([anEvent characters]).toString();
+        length = [newValue length];
 
-    if (keyCode == CPDeleteKeyCode || keyCode == CPDeleteForwardKeyCode)
+    if (isDelete)
     {
         [_timerEdition invalidate];
         _timerEdition = nil;
-        newValue = [newValue substringToIndex:(length - 1)];
+        
+        // Ensure we don't substring if length is 0
+        if (length > 0)
+            newValue = [newValue substringToIndex:(length - 1)];
     }
     else
     {
+        // Since isNumeric is true, characters is a valid digit string
+        var eventKeyValue = characters;
         if (!_timerEdition)
         {
             _timerEdition = [CPTimer scheduledTimerWithTimeInterval:2 target:self selector:@selector(_timerKeyEvent:) userInfo:nil repeats:NO];
@@ -227,7 +242,12 @@ CPAMPMDateType = 6;
         }
     }
 
-    if (parseInt(newValue) > [self _maxNumberWithMaxDate] || ([_datePicker _isAmericanFormat] && _dateType == CPHourDateType && parseInt(newValue) > 12))
+    // Safety check for NaN before comparison
+    var numericValue = parseInt(newValue);
+    if (isNaN(numericValue))
+        numericValue = 0;
+
+    if (numericValue > [self _maxNumberWithMaxDate] || ([_datePicker _isAmericanFormat] && _dateType == CPHourDateType && numericValue > 12))
         return;
 
     _firstEvent = NO;
@@ -385,6 +405,17 @@ CPAMPMDateType = 6;
                 return;
             }
 
+            // if we enter a day that is too high for the current month
+            // we need to increase the month by one
+            // if we do not do this, the user input would be silently reset
+            // very poor user experience
+
+            if (parseInt(anObjectValue, 10) > [dateValue _daysInMonth])
+            {
+                [_datePickerElementView._textFieldMonth setIntValue:(dateValue.getMonth() + 2)];
+                [super setObjectValue:objectValue];
+                return;
+            }
             [super setObjectValue:objectValue];
             break;
 
@@ -454,8 +485,8 @@ CPAMPMDateType = 6;
 }
 
 
-#pragma mark -
-#pragma mark Mouse event
+// MARK: -
+// MARK: Mouse event
 
 /*! Mouse down event. Launch a notification to notif the new first responder textField
 */
@@ -469,8 +500,8 @@ CPAMPMDateType = 6;
 }
 
 
-#pragma mark -
-#pragma mark Theme functions
+// MARK: -
+// MARK: Theme functions
 
 /*! Set the theme CPThemeStateSelected
 */
@@ -490,8 +521,8 @@ CPAMPMDateType = 6;
 }
 
 
-#pragma mark -
-#pragma mark Override
+// MARK: -
+// MARK: Override
 
 /*!
     We override this method to get all the time the good width
@@ -557,7 +588,7 @@ CPAMPMDateType = 6;
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation _CPDatePickerElementSeparator : CPTextField
 

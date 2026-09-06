@@ -1014,10 +1014,27 @@ var LABEL_MARGIN    = 2.0;
 
     CPImageView     _imageView;
     CPView          _view;
+    CPView          _highlightView;
 
     CPTextField     _labelField;
 
     BOOL            _FIXME_isHUD;
+}
+
+- (BOOL)acceptsFirstResponder
+{
+    if (_view && [_view acceptsFirstResponder])
+        return YES;
+
+     return NO;
+}
+
+- (BOOL)becomeFirstResponder
+{
+    if (_view && [_view acceptsFirstResponder])
+        return [[self window] makeFirstResponder:_view];
+
+    return [super becomeFirstResponder];
 }
 
 - (id)initWithToolbarItem:(CPToolbarItem)aToolbarItem toolbar:(CPToolbar)aToolbar
@@ -1243,6 +1260,18 @@ var LABEL_MARGIN    = 2.0;
 
         if (alternateImage)
             [_imageView setImage:alternateImage];
+        else
+        {
+            if (!_highlightView)
+            {
+                _highlightView = [[CPView alloc] initWithFrame:[_imageView bounds]];
+                [_highlightView setBackgroundColor:[CPColor blackColor]];
+                [_highlightView setAlphaValue:0.3];
+                [_highlightView setAutoresizingMask:CPViewWidthSizable | CPViewHeightSizable];
+            }
+
+            [_imageView addSubview:_highlightView];
+        }
 
         [_labelField setTextShadowOffset:CGSizeMakeZero()];
     }
@@ -1252,6 +1281,8 @@ var LABEL_MARGIN    = 2.0;
 
         if (image)
             [_imageView setImage:image];
+
+        [_highlightView removeFromSuperview];
 
         [_labelField setTextShadowOffset:CGSizeMake(0.0, 1.0)];
     }

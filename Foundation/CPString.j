@@ -20,17 +20,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-@import "CPException.j"
 @import "CPObject.j"
 @import "CPObjJRuntime.j"
 @import "CPRange.j"
-@import "CPSortDescriptor.j"
-@import "CPURL.j"
 @import "CPValue.j"
 @import "CPNull.j"
 
 @class CPException
 @class CPURL
+@class CPSortDescriptor
 
 @global CPInvalidArgumentException
 @global CPRangeException
@@ -571,6 +569,16 @@ var CPStringNull = [CPNull null];
 }
 
 /*!
+ Returns \c YES if the receiver contains
+ the specified string. If \c aString
+ is empty, the method will return \c NO.
+ */
+- (BOOL)containsString:(CPString)aString
+{
+    return aString && aString != "" && self.indexOf(aString) >= 0;
+}
+
+/*!
     Returns \c YES if the receiver ends
     with the specified string. If \c aString
     is empty, the method will return \c NO.
@@ -1000,4 +1008,15 @@ String.prototype.stripDiacritics = function()
     return output;
 };
 
-String.prototype.isa = CPString;
+if (String.prototype.isa !== CPString)
+{
+    Object.defineProperties(String.prototype,
+    {
+        isa:
+        {
+            value: CPString,
+            enumerable: false,
+            writable: true
+        }
+    })
+};

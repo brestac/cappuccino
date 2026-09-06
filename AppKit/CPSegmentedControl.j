@@ -561,10 +561,11 @@ CPSegmentSwitchTrackingMomentary = 2;
     }
     else if (aName === "right-segment-bezel")
     {
-        return CGRectMake(CGRectGetWidth([self bounds]) - contentInset.right,
-                            bezelInset.top,
-                            contentInset.right,
-                            height);
+        // we have to FLOOR the coordinates to prevent a 1px glitch in Safari
+        return CGRectMake(FLOOR(CGRectGetWidth([self bounds]) - contentInset.right),
+                          FLOOR(bezelInset.top),
+                          FLOOR(contentInset.right),
+                          FLOOR(height));
     }
     else if (aName.indexOf("segment-bezel") === 0)
     {
@@ -792,7 +793,8 @@ CPSegmentSwitchTrackingMomentary = 2;
             label = [segment label],
             image = [segment image];
 
-        width = (label ? [label sizeWithFont:[self font]].width : 4.0) + (image ? [image size].width : 0) + contentInsetWidth;
+        // add 1 pixel to account for possible fractional pixels at right edge
+        width = (label ? [label sizeWithFont:[self font]].width + 1 : 4.0) + (image ? [image size].width : 0) + contentInsetWidth;
     }
 
     return CGRectMake(left, top, width, height);

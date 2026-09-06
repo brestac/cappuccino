@@ -233,6 +233,7 @@ var themedButtonValues = nil,
 
             [@"content-inset",              CGInsetMake(0.0, 5.0, 0.0, 5.0),    [CPThemeStateControlSizeSmall, CPThemeStateBordered]],
             [@"nib2cib-adjustment-frame",   CGRectMake(-3.0, 6.0, 0.0, 0.0),    [CPThemeStateControlSizeSmall, CPThemeStateBordered]],
+            [@"font",                       [CPFont boldSystemFontOfSize:11.0], [CPThemeStateControlSizeSmall, CPThemeStateBordered]],
 
             // RoundRect CPThemeStateControlSizeMini
             [@"bezel-color",
@@ -256,6 +257,7 @@ var themedButtonValues = nil,
 
             [@"content-inset",              CGInsetMake(0.0, 2.0, 2.0, 2.0),    [CPThemeStateControlSizeMini, CPThemeStateBordered]],
             [@"nib2cib-adjustment-frame",   CGRectMake(0.0, 14.0, 0.0, 0.0),    [CPThemeStateControlSizeMini, CPThemeStateBordered]],
+            [@"font",                       [CPFont boldSystemFontOfSize:10.0], [CPThemeStateControlSizeMini, CPThemeStateBordered]],
 
             // Rounded
             [@"bezel-color",
@@ -517,15 +519,17 @@ var themedButtonValues = nil,
                 width: 9.0,
                 height: 4.0,
                 orientation: PatternIsVertical
-            }),
+            });
+    
+        // removed as variable is never read
 
-        knobColorLegacy = PatternColor(
+/*         knobColorLegacy = PatternColor(
             "scroller-legacy-vertical-knob{position}.png",
             {
                 width: 14.0,
                 height: 3.0,
                 orientation: PatternIsVertical
-            });
+            }) */
 
     themedVerticalScrollerValues =
         [
@@ -593,15 +597,16 @@ var themedButtonValues = nil,
                 width: 4.0,
                 height: 9.0,
                 orientation: PatternIsHorizontal
-            }),
-
-        knobColorLegacy = PatternColor(
+            });
+        
+        // removed as variable is never read
+/*         knobColorLegacy = PatternColor(
             "scroller-legacy-horizontal-knob{position}.png",
             {
                 width: 3.0,
                 height: 14.0,
                 orientation: PatternIsHorizontal
-            });
+            }) */
 
     themedHorizontalScrollerValues =
         [
@@ -2792,7 +2797,7 @@ var themedButtonValues = nil,
         closeButtonImageInactive =          PatternImage(@"window-standard-close-button-inactive.png", 16, 16),
         closeButtonImageHighlighted =       PatternImage(@"window-standard-button-highlighted.png", 16, 16),
         unsavedButtonImage =                PatternImage(@"window-standard-button-unsaved.png", 16, 16),
-        unsavedButtonImageInactive =        PatternImage(@"window-standard-button-unsaved-inactive.png", 16, 16),
+        //unsavedButtonImageInactive =        PatternImage(@"window-standard-button-unsaved-inactive.png", 16, 16), removed as it is unused
         unsavedButtonImageHighlighted =     PatternImage(@"window-standard-close-button-unsaved-highlighted.png", 16, 16),
         minimizeButtonImage =               PatternImage(@"window-standard-minimize-button.png", 16, 16),
         minimizeButtonImageHighlighted =    PatternImage(@"window-standard-minimize-button-highlighted.png", 16, 16),

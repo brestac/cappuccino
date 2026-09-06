@@ -23,12 +23,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "../Foundation/Foundation.h"
 
 @import "CPAnimation.j"
 @import "CPControl.j"
-@import "CPWindow_Constants.j"
 @import "CPViewAnimation.j"
+@import "CPWindow_Constants.j"
 
 @global CPApp
 
@@ -62,6 +61,7 @@ NAMES_FOR_PARTS[CPScrollerKnobSlot]         = @"knob-slot";
 NAMES_FOR_PARTS[CPScrollerKnob]             = @"knob";
 
 
+@typedef CPScrollerStyle
 CPScrollerStyleLegacy           = 0;
 CPScrollerStyleOverlay          = 1;
 
@@ -101,8 +101,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Class methods
+// MARK: -
+// MARK: Class methods
 
 + (CPString)defaultThemeClass
 {
@@ -134,7 +134,7 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 /*!
     Returns the CPScroller's width for a CPRegularControlSize.
 */
-+ (float)scrollerWidthInStyle:(int)aStyle
++ (float)scrollerWidthInStyle:(CPScrollerStyle)aStyle
 {
     if (!_CACHED_THEME_SCROLLER)
         _CACHED_THEME_SCROLLER = [[self alloc] init];
@@ -166,8 +166,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Initialization
+// MARK: -
+// MARK: Initialization
 
 - (id)initWithFrame:(CGRect)aFrame
 {
@@ -202,8 +202,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Getters / Setters
+// MARK: -
+// MARK: Getters / Setters
 
 /*!
     Returns the scroller's style
@@ -217,7 +217,7 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
     Set the scroller's control size
     @param aStyle the scroller style: CPScrollerStyleLegacy or CPScrollerStyleOverlay
 */
-- (void)setStyle:(id)aStyle
+- (void)setStyle:(CPScrollerStyle)aStyle
 {
     if (_style != nil && _style === aStyle)
         return;
@@ -258,7 +258,7 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 */
 - (void)setKnobProportion:(float)aProportion
 {
-    if (!_IS_NUMERIC(aProportion))
+    if (!CPIsNumeric(aProportion))
         [CPException raise:CPInvalidArgumentException reason:"aProportion must be numeric, was: "+aProportion];
 
     _knobProportion = MIN(1.0, MAX(0.0001, aProportion));
@@ -268,8 +268,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Privates
+// MARK: -
+// MARK: Privates
 
 /*! @ignore */
 - (void)_adjustScrollerSize
@@ -294,8 +294,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Utilities
+// MARK: -
+// MARK: Utilities
 
 - (CGRect)rectForPart:(CPScrollerPart)aPart
 {
@@ -467,8 +467,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark  Drawing
+// MARK: -
+// MARK:  Drawing
 
 /*!
     Draws the specified arrow and sets the highlight.
@@ -702,8 +702,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
 }
 
 
-#pragma mark -
-#pragma mark Overrides
+// MARK: -
+// MARK: Overrides
 
 - (id)currentValueForThemeAttribute:(CPString)anAttributeName
 {
@@ -779,8 +779,8 @@ CPThemeStateScrollerKnobDark    = CPThemeState("scroller-knob-dark");
     return [self currentValueForThemeAttribute:@"scroller-width"];
 }
 
-#pragma mark -
-#pragma mark Delegates
+// MARK: -
+// MARK: Delegates
 
 - (void)animationDidEnd:(CPAnimation)animation
 {

@@ -52,7 +52,7 @@
 }
 
 
-#pragma mark Init method
+// MARK: Init method
 
 /*! Init a _CPDatePickerCalendar
     @param aFrame
@@ -111,8 +111,8 @@
 }
 
 
-#pragma mark -
-#pragma mark Responder methods
+// MARK: -
+// MARK: Responder methods
 
 - (BOOL)acceptsFirstResponder
 {
@@ -120,8 +120,8 @@
 }
 
 
-#pragma mark -
-#pragma mark Getter Setter methods
+// MARK: -
+// MARK: Getter Setter methods
 
 /*! Set the date value of the component. It sets the dateValue of the header and the monthView also
     @param aDateValue
@@ -154,14 +154,18 @@
 {
     if (_datePickerElements === aDatePickerElements)
         return;
+    _datePickerElements = aDatePickerElements;
+
+    [self _init];
+}
 
     _datePickerElements = aDatePickerElements;
 
     [self _init];
 }
 
-#pragma mark -
-#pragma mark Layout methods
+// MARK: -
+// MARK: Layout methods
 
 /*! Manager the subviews. It hides or not the clock.
 */
@@ -221,8 +225,8 @@
 }
 
 
-#pragma mark -
-#pragma mark Action methods
+// MARK: -
+// MARK: Action methods
 
 /*! Move to the nextMonth without changing the dateValue of the datePicker
 */
@@ -251,7 +255,15 @@
 
 - (void)_displayNextMonth
 {
-     [self setDateValue:[_monthView nextMonth]];
+    // Copy the date so we don't modify the view's state directly
+    var nextDate = [[_monthView nextMonth] copy];
+    
+    // Set to the middle of the month (15th).
+    // This prevents [setDateValue:]'s timezone adjustment from 
+    // shifting the date back into the previous month (e.g., Nov 1 -> Oct 31).
+    nextDate.setDate(15);
+    
+    [self setDateValue:nextDate];
 }
 
 - (void)_displayPreviousMonth

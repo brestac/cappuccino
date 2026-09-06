@@ -23,13 +23,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "../Foundation/Foundation.h"
-
 @import "CPButtonBar.j"
-@import "CPImage.j"
-@import "CPView.j"
 @import "CPCursor.j"
+@import "CPImage.j"
 @import "CPTrackingArea.j"
+@import "CPView.j"
 
 @class CPUserDefaults
 @global CPApp
@@ -216,7 +214,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
     [self _setVertical:YES];
 }
 
-#pragma mark - Properties
+// MARK: - Properties
 
 - (CPSplitViewDividerStyle)dividerStyle
 {
@@ -479,7 +477,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
     return _delegate;
 }
 
-#pragma mark - Subviews management
+// MARK: - Subviews management
 
 // FIXME: il faut également tenir compte des button bars quand on ajouter / insert une vue.
 // Par exemple, si une button bar est placée sur la dernière vue, pas de resize à droite mais
@@ -652,7 +650,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
     _subviewsManagementDisabled = NO;
 }
 
-#pragma mark - Layout subviews
+// MARK: - Layout subviews
 
 - (CGRect)rectOfDividerAtIndex:(int)aDivider
 {
@@ -845,7 +843,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
     [self updateTrackingAreas];
 }
 
-#pragma mark - Private layout utilities
+// MARK: - Private layout utilities
 
 - (void)_distribute:(CPInteger)remainingSpace amoung:(CPInteger)count onFlexible:(BOOL)onFlexible fromIndex:(CPInteger)fromIndex toIndex:(CPInteger)toIndex
 {
@@ -900,7 +898,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
             [_ratios addObject:(_initialSizes[i] / fixedSpace)];
 }
 
-#pragma mark -
+// MARK: -
 
 /*!
     Returns YES if the supplied subview is collapsed, otherwise NO.
@@ -1171,7 +1169,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
     // Silently ignore bad positions which could result from odd delegate responses. We don't want these
     // bad results to go into the system and cause havoc with frame sizes as the split view tries to resize
     // its subviews.
-    if (_IS_NUMERIC(proposedPosition))
+    if (CPIsNumeric(proposedPosition))
         position = proposedPosition;
 
     var proposedMax = [self maxPossiblePositionOfDividerAtIndex:dividerIndex],
@@ -1181,10 +1179,10 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
         proposedActualMin = [self _sendDelegateSplitViewConstrainMinCoordinate:proposedMin ofSubviewAt:dividerIndex],
         proposedActualMax = [self _sendDelegateSplitViewConstrainMaxCoordinate:proposedMax ofSubviewAt:dividerIndex];
 
-    if (_IS_NUMERIC(proposedActualMin))
+    if (CPIsNumeric(proposedActualMin))
         actualMin = proposedActualMin;
 
-    if (_IS_NUMERIC(proposedActualMax))
+    if (CPIsNumeric(proposedActualMax))
         actualMax = proposedActualMax;
 
     var viewA = _arrangedSubviews[dividerIndex],
@@ -1487,7 +1485,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPSplitView (CPTrackingArea)
 {
@@ -1567,7 +1565,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPSplitView (CPSplitViewDelegate)
 
@@ -1745,7 +1743,7 @@ var CPThemeStatesForSplitViewDivider = @[@"dummy one as CPSplitViewDividerStyle 
 
 @end
 
-#pragma mark -
+// MARK: -
 
 var CPSplitViewDelegateKey            = @"CPSplitViewDelegateKey",
     CPSplitViewIsVerticalKey          = @"CPSplitViewIsVerticalKey",
@@ -1870,7 +1868,7 @@ var CPSplitViewDelegateKey            = @"CPSplitViewDelegateKey",
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPSplitView (Deprecated)
 

@@ -17,18 +17,41 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA
  */
 
 @import <Foundation/CPObject.j>
 @import <Foundation/CPIndexPath.j>
+@import <Foundation/CPArray.j>
 
-
+/*
+ * CPTreeNode implements the NSTreeNode contract.
+ * The _childNodes array contains only CPTreeNode instances.
+ * The representedObject property contains the application data.
+ * The _parentNode and _childNodes properties maintain a strict bidirectional relationship.
+ * The KVC mutation methods are the public mechanism to change the tree structure.
+ */
 @implementation CPTreeNode : CPObject
 {
-    id              _representedObject @accessors(readonly, property=representedObject);
-
-    CPTreeNode      _parentNode @accessors(readonly, property=parentNode);
+    /*
+     * KVO notifications on parentNode are never delivered: there is no
+     * setParentNode: for the swizzling machinery to intercept, so there is
+     * no selector to instrument, in any code path.
+     *
+     * KVO notifications on childNodes are reliable for
+     * insertObject:inChildNodesAtIndex:, including same-parent and
+     * cross-parent moves: all detach paths for that method route through
+     * the KVC accessors. replaceObjectInChildNodesAtIndex:withObject:
+     * still detaches a same-parent replacement node by mutating
+     * _childNodes directly, bypassing the KVC proxy for that step; an
+     * observer of that node's former parent's childNodes can miss that
+     * specific removal, or see it reported as the wrong kind of change.
+     * Do not rely on childNodes observation during a same-parent replace;
+     * rely only on the state after the call returns.
+     */
+    id              _representedObject  @accessors(readonly, property=representedObject);
+    CPTreeNode      _parentNode         @accessors(readonly, property=parentNode);
     CPMutableArray  _childNodes;
 }
 
@@ -50,13 +73,120 @@
     return self;
 }
 
+/*
+ * Route plain init through the designated initializer.
+ * Without this override, [[CPTreeNode alloc] init] leaves _childNodes unset.
+ * The first mutation call then fails against an undefined array.
+ */
+- (id)init
+{
+    return [self initWithRepresentedObject:nil];
+}
+
+/*
+ * Return YES if adding aTreeNode below self makes a cycle.
+ * This method walks the parent chain.
+ * The operation time is proportional to the tree depth.
+ */
+- (BOOL)_wouldCreateCycleWithNode:(CPTreeNode)aTreeNode
+{
+    for (var node = self; node; node = node._parentNode)
+    {
+        if (node === aTreeNode)
+            return YES;
+    }
+
+    return NO;
+}
+
+/*
+ * Enforce the NSTreeNode abstraction boundary.
+ * All children must be CPTreeNode instances.
+ */
+- (void)_validateChildNode:(id)aTreeNode
+{
+    if (![aTreeNode isKindOfClass:[CPTreeNode class]])
+    {
+        [CPException raise:CPInvalidArgumentException
+                    reason:"CPTreeNode children must be CPTreeNode instances."];
+    }
+}
+
+/*
+ * Remove a child node by delegating to the public KVC accessor.
+ * Use this method for internal structural changes across a parent
+ * boundary, so an observer of this node's childNodes sees the removal.
+ */
+- (void)_removeChildNode:(CPTreeNode)aNode
+{
+    var index = [_childNodes indexOfObjectIdenticalTo:aNode];
+
+    /*
+     * A caller reaches this method only when aNode.parentNode already equals
+     * self (see the two call sites below). If self._childNodes does not
+     * actually contain aNode at that point, the parent/child relationship
+     * is already broken. indexPath raises for this identical class of
+     * inconsistency; silently returning here would hide the same problem
+     * instead of surfacing it.
+     */
+    if (index === CPNotFound)
+    {
+        [CPException raise:CPInternalInconsistencyException
+                    reason:"CPTreeNode parent and child relationship is inconsistent."];
+    }
+
+    [self removeObjectFromChildNodesAtIndex:index];
+}
+
+- (CPIndexPath)indexPath
+{
+    if (!_parentNode)
+        return [CPIndexPath indexPathWithIndexes:[]];
+
+    var indexes = [],
+    node = self;
+
+    while (node._parentNode)
+    {
+        var parent = node._parentNode,
+        index = [parent._childNodes indexOfObjectIdenticalTo:node];
+
+        if (index === CPNotFound)
+        {
+            [CPException raise:CPInternalInconsistencyException
+                        reason:"CPTreeNode parent and child relationship is inconsistent."];
+        }
+
+        [indexes addObject:index];
+        node = parent;
+    }
+
+    /*
+     * indexes was collected leaf-to-root. Build a second array in
+     * root-to-leaf order by walking indexes backward. CPArray has no
+     * -reverse selector; count/objectAtIndex:/addObject: are the verified,
+     * already-used-elsewhere primitives.
+     */
+    var orderedIndexes = [],
+    count = [indexes count];
+
+    while (count--)
+        [orderedIndexes addObject:[indexes objectAtIndex:count]];
+
+    return [CPIndexPath indexPathWithIndexes:orderedIndexes];
+}
+
 - (BOOL)isLeaf
 {
-    return [_childNodes count] <= 0;
+    return [_childNodes count] == 0;
 }
 
 - (CPArray)childNodes
 {
+    /*
+     * Return a copy.
+     * This prevents external changes that bypass the KVC methods.
+     */
     return [_childNodes copy];
 }
 
@@ -65,25 +195,140 @@
     return [self mutableArrayValueForKey:@"childNodes"];
 }
 
-- (void)insertObject:(id)aTreeNode inChildNodesAtIndex:(CPInteger)anIndex
+/*
+ * KVC compliance methods.
+ * The mutableArrayValueForKey: method uses these names.
+ */
+
+- (void)insertObject:(CPTreeNode)aTreeNode inChildNodesAtIndex:(CPInteger)anIndex
 {
-    [[aTreeNode._parentNode mutableChildNodes] removeObjectIdenticalTo:aTreeNode];
+    var count = [_childNodes count];
+
+    if (anIndex < 0 || anIndex > count)
+    {
+        [CPException raise:CPRangeException
+                    reason:"index (" + anIndex + ") beyond bounds (0 .. " + count + ") for insertObject:inChildNodesAtIndex:"];
+    }
+
+    [self _validateChildNode:aTreeNode];
+
+    if ([self _wouldCreateCycleWithNode:aTreeNode])
+    {
+        [CPException raise:CPInvalidArgumentException
+                    reason:"Inserting a CPTreeNode beneath itself or one of its descendants makes a cycle."];
+    }
+
+    /*
+     * Detach the node from its old parent first.
+     * The code validated the index before this change.
+     */
+    if (aTreeNode._parentNode)
+    {
+        if (aTreeNode._parentNode === self)
+        {
+            var originalIndex = [_childNodes indexOfObjectIdenticalTo:aTreeNode];
+
+            /*
+             * Route the detach through the KVC accessor, not direct array
+             * mutation, so an observer of childNodes sees the removal.
+             */
+            [self removeObjectFromChildNodesAtIndex:originalIndex];
+
+            /*
+             * No index adjustment here. anIndex is the target position in
+             * the final array, per the KVC to-many contract. The array
+             * above is already one element short from the removal, so
+             * inserting at anIndex against it lands the node correctly.
+             */
+        }
+        else
+        {
+            /*
+             * Detach the node from its old parent.
+             * Use the internal method to bypass KVO overhead.
+             */
+            [aTreeNode._parentNode _removeChildNode:aTreeNode];
+        }
+    }
 
     aTreeNode._parentNode = self;
-
     [_childNodes insertObject:aTreeNode atIndex:anIndex];
 }
 
 - (void)removeObjectFromChildNodesAtIndex:(CPInteger)anIndex
 {
-    [_childNodes objectAtIndex:anIndex]._parentNode = nil;
+    var node = [_childNodes objectAtIndex:anIndex];
 
+    node._parentNode = nil;
     [_childNodes removeObjectAtIndex:anIndex];
 }
 
-- (void)replaceObjectFromChildNodesAtIndex:(CPInteger)anIndex withObject:(id)aTreeNode
+- (void)replaceObjectInChildNodesAtIndex:(CPInteger)anIndex withObject:(CPTreeNode)aTreeNode
 {
     var oldTreeNode = [_childNodes objectAtIndex:anIndex];
+
+    [self _validateChildNode:aTreeNode];
+
+    if (oldTreeNode === aTreeNode)
+        return;
+
+    if ([self _wouldCreateCycleWithNode:aTreeNode])
+    {
+        [CPException raise:CPInvalidArgumentException
+                    reason:"Replacing a child with itself or one of its ancestors makes a cycle."];
+    }
+
+    /*
+     * If the replacement node is already a child of this parent, remove it first.
+     * The removal shifts the array elements.
+     * Adjust the target index before the replace operation.
+     * This matches the Cocoa KVC mutation semantics.
+     */
+    var oldParent = aTreeNode._parentNode;
+
+    if (oldParent === self)
+    {
+        var replacementIndex = [_childNodes indexOfObjectIdenticalTo:aTreeNode];
+
+        /*
+         * aTreeNode.parentNode already equals self at this point. If
+         * self._childNodes does not actually contain aTreeNode, the
+         * parent/child relationship is already broken. indexPath raises
+         * for this identical class of inconsistency; proceeding here would
+         * silently tolerate the same problem instead of surfacing it.
+         */
+        if (replacementIndex === CPNotFound)
+        {
+            [CPException raise:CPInternalInconsistencyException
+                        reason:"CPTreeNode parent and child relationship is inconsistent."];
+        }
+
+        /*
+         * Bypass KVO for this internal structural adjustment.
+         */
+        aTreeNode._parentNode = nil;
+        [_childNodes removeObjectAtIndex:replacementIndex];
+
+        /*
+         * Unlike insertObject:inChildNodesAtIndex:, anIndex here cannot be
+         * treated as a plain final-array position: replace requires an
+         * existing slot, it cannot append past the end. The removal above
+         * already took a slot out of the array ahead of the target
+         * whenever the replacement's original position was before it.
+         * Shift anIndex down by one in that case, to keep it pointing at
+         * the same physical slot the caller named.
+         */
+        if (replacementIndex < anIndex)
+            --anIndex;
+    }
+    else if (oldParent)
+    {
+        /*
+         * Detach the node from its old parent.
+         * Use the internal method to bypass KVO overhead.
+         */
+        [oldParent _removeChildNode:aTreeNode];
+    }
 
     oldTreeNode._parentNode = nil;
     aTreeNode._parentNode = self;
@@ -93,30 +338,68 @@
 
 - (id)objectInChildNodesAtIndex:(CPInteger)anIndex
 {
-    return _childNodes[anIndex];
+    return [_childNodes objectAtIndex:anIndex];
+}
+
+- (CPInteger)countOfChildNodes
+{
+    return [_childNodes count];
 }
 
 - (void)sortWithSortDescriptors:(CPArray)sortDescriptors recursively:(BOOL)shouldSortRecursively
 {
-    [_childNodes sortUsingDescriptors:sortDescriptors];
-
     if (!shouldSortRecursively)
+    {
+        [_childNodes sortUsingDescriptors:sortDescriptors];
         return;
+    }
 
-    var count = [_childNodes count];
+    /*
+     * Use an explicit stack, not recursion.
+     * The recursive form is not a tail call.
+     * The sibling loop continues after each child call returns.
+     * Only JavaScriptCore performs tail call optimization.
+     * The explicit stack prevents stack overflow on deep trees.
+     */
+    var stack = [];
 
-    while (count--)
-        [_childNodes[count] sortWithSortDescriptors:sortDescriptors recursively:YES];
+    [stack addObject:self];
+
+    while ([stack count])
+    {
+        var node = [stack lastObject];
+
+        [stack removeLastObject];
+
+        [node._childNodes sortUsingDescriptors:sortDescriptors];
+
+        var count = [node._childNodes count];
+
+        while (count--)
+        {
+            [stack addObject:[node._childNodes objectAtIndex:count]];
+        }
+    }
 }
 
 - (CPTreeNode)descendantNodeAtIndexPath:(CPIndexPath)indexPath
 {
-    var index = 0,
-        count = [indexPath length],
-        node = self;
+    if (!indexPath || [indexPath length] == 0)
+        return self;
 
-    for (; index < count; ++index)
-        node = [node objectInChildNodesAtIndex:[indexPath indexAtPosition:index]];
+    var node = self,
+    length = [indexPath length];
+
+    for (var i = 0; i < length; i++)
+    {
+        var index = [indexPath indexAtPosition:i],
+        count = [node countOfChildNodes];
+
+        if (index < 0 || index >= count)
+            return nil;
+
+        node = [node objectInChildNodesAtIndex:index];
+    }
 
     return node;
 }
@@ -138,6 +421,27 @@ var CPTreeNodeRepresentedObjectKey  = @"CPTreeNodeRepresentedObjectKey",
         _representedObject = [aCoder decodeObjectForKey:CPTreeNodeRepresentedObjectKey];
         _parentNode = [aCoder decodeObjectForKey:CPTreeNodeParentNodeKey];
         _childNodes = [aCoder decodeObjectForKey:CPTreeNodeChildNodesKey];
+
+        if (!_childNodes)
+            _childNodes = [];
+
+        if (![_childNodes isKindOfClass:[CPMutableArray class]])
+            _childNodes = [_childNodes mutableCopy];
+
+        /*
+         * The child array is the authoritative structure.
+         * Re-establish the parent links.
+         * This makes the decoded tree match the tree built by the mutation methods.
+         */
+        var count = [_childNodes count];
+
+        while (count--)
+        {
+            var child = [_childNodes objectAtIndex:count];
+
+            [self _validateChildNode:child];
+            child._parentNode = self;
+        }
     }
 
     return self;

@@ -32,7 +32,7 @@ var CPStringSizeWithFontInWidthCache = [],
     CPStringSizeWithFontHeightCache = [],
     CPStringSizeMeasuringContext;
 
-CPStringSizeCachingEnabled = YES;
+CPCanvasStringSizingIsFunctional = NO;
 
 @implementation CPString (CPStringDrawing)
 
@@ -63,36 +63,38 @@ CPStringSizeCachingEnabled = YES;
         return;
 
 #if PLATFORM(DOM)
-    if (CPFeatureIsCompatible(CPHTMLCanvasFeature) && !CPStringSizeMeasuringContext)
-        CPStringSizeMeasuringContext = CGBitmapGraphicsContextCreate();
+    if (CPFeatureIsCompatible(CPHTMLCanvasFeature))
+    {
+        if (!CPStringSizeMeasuringContext)
+            CPStringSizeMeasuringContext = CGBitmapGraphicsContextCreate();
+
+        // This is to make sure that Canvas based string sizing is functional before we use it.
+        // Unfortunately, as of today canvas sizing is not funtional any more. Neither in Chrome nor in FF
+
+        CPCanvasStringSizingIsFunctional = NO;
+    }
 #endif
 }
 
-- (CGSize)_sizeWithFont:(CPFont)aFont inWidth:(float)aWidth
+- (CGSize)sizeWithFont:(CPFont)aFont inWidth:(float)aWidth
 {
     var size;
 
 #if PLATFORM(DOM)
-    if (!CPStringSizeCachingEnabled)
-        return [CPPlatformString sizeOfString:self withFont:aFont forWidth:aWidth];
-
     var sizeCacheForFont = CPStringSizeWithFontInWidthCache[self];
 
     if (sizeCacheForFont === undefined)
         sizeCacheForFont = CPStringSizeWithFontInWidthCache[self] = [];
 
-    if (!aWidth)
-        aWidth = '0';
-
     var cssString = [aFont cssString],
-        cacheKey = cssString + '_' + aWidth;
+        cacheKey = cssString + '_' + (aWidth ? aWidth : '0');
 
     size = sizeCacheForFont[cacheKey];
 
     if (size !== undefined && sizeCacheForFont.hasOwnProperty(cacheKey))
         return CGSizeMakeCopy(size);
 
-    if (!CPFeatureIsCompatible(CPHTMLCanvasFeature) || aWidth > 0)
+    if (!CPCanvasStringSizingIsFunctional || aWidth)
         size = [CPPlatformString sizeOfString:self withFont:aFont forWidth:aWidth];
     else
     {
@@ -109,15 +111,9 @@ CPStringSizeCachingEnabled = YES;
 
     sizeCacheForFont[cacheKey] = size;
 #else
-        size = CGSizeMake(0, 0);
+    size = CGSizeMake(0, 0);
 #endif
     return CGSizeMakeCopy(size);
-}
-
-- (CGSize)sizeWithFont:(CPFont)aFont inWidth:(float)aWidth
-{
-    var size = [self _sizeWithFont:aFont inWidth:aWidth];
-    return CGSizeMake(CEIL(size.width), size.height);
 }
 
 @end

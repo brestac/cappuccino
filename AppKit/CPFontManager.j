@@ -29,6 +29,8 @@
 @global CPApp
 @class CPFontPanel
 
+@global document
+
 CPItalicFontMask                    = 1 << 0;
 CPBoldFontMask                      = 1 << 1;
 CPUnboldFontMask                    = 1 << 2;
@@ -206,7 +208,11 @@ CPRemoveTraitFontAction = 7;
 
 - (@action)addFontTrait:(id)sender
 {
-    var tag = [sender tag];
+    var tag = sender;
+
+    if ([sender respondsToSelector:@selector(tag)])
+        tag = [sender tag];
+
     _activeChange = tag == nil ? @{} : @{ @"addTraits": tag };
     _fontAction = CPAddTraitFontAction;
 

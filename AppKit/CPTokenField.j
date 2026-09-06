@@ -40,6 +40,7 @@
 @global CPTextFieldDidFocusNotification
 @global CPTextFieldDidBlurNotification
 
+@global document
 
 // TODO: should be conform to protocol CPTextFieldDelegate
 @protocol CPTokenFieldDelegate <CPObject>
@@ -168,8 +169,8 @@ CPTokenFieldDeleteButtonType     = 1;
     [self addSubview:_tokenScrollView];
 }
 
-#pragma mark -
-#pragma mark Delegate methods
+// MARK: -
+// MARK: Delegate methods
 
 /*!
     Set the delegate of the receiver
@@ -348,6 +349,12 @@ CPTokenFieldDeleteButtonType     = 1;
     if (theBinding)
         [theBinding reverseSetValueFor:@"objectValue"];
 
+    if (!_isEditing)
+    {
+        _isEditing = YES;
+        [self textDidBeginEditing:[CPNotification notificationWithName:CPControlTextDidBeginEditingNotification object:self userInfo:nil]];
+    }
+
     [self textDidChange:[CPNotification notificationWithName:CPControlTextDidChangeNotification object:self userInfo:nil]];
 
     _shouldNotifyTarget = YES;
@@ -452,8 +459,8 @@ CPTokenFieldDeleteButtonType     = 1;
     {
         [_tokenScrollView documentView]._DOMElement.appendChild(element);
 
-        //post CPControlTextDidBeginEditingNotification
-        [self textDidBeginEditing:[CPNotification notificationWithName:CPControlTextDidBeginEditingNotification object:self userInfo:nil]];
+        // Removed so CPTokenField doesn't fire the notification the moment it becomes the first responder, but instead defers to the first keystroke, just like Cocoa (see keyDown: in CPTextField).
+        // [self textDidBeginEditing:[CPNotification notificationWithName:CPControlTextDidBeginEditingNotification object:self userInfo:nil]];
 
         [[CPRunLoop mainRunLoop] performBlock:function()
         {
@@ -496,6 +503,8 @@ CPTokenFieldDeleteButtonType     = 1;
     [self _setObserveWindowKeyNotifications:NO];
 
     [self _resignFirstKeyResponder];
+
+    _isEditing = NO;
 
     if (_shouldNotifyTarget)
     {
@@ -550,7 +559,7 @@ CPTokenFieldDeleteButtonType     = 1;
         CPTokenFieldCachedDragFunction = nil;
 
         document.body.ondrag = CPTokenFieldCachedDragFunction;
-        document.body.onselectstart = CPTokenFieldCachedSelectStartFunction
+        document.body.onselectstart = CPTokenFieldCachedSelectStartFunction;
     }
 
 #endif
@@ -584,6 +593,12 @@ CPTokenFieldDeleteButtonType     = 1;
         // Snap to the token if it's only half visible due to mouse wheel scrolling.
         _shouldScrollTo = aToken;
     }
+
+    // this is a hack to compensate for a recent adoption in FR management as introduced by commit #26aab29
+    // this PR makes the tokenfield loose FR status prematurely, so we have to regain here in order to make deleteForward: and friends work
+    setTimeout(function(){
+        [[self window] makeFirstResponder:self];
+    }, 50);
 }
 
 // ===========
@@ -964,8 +979,8 @@ CPTokenFieldDeleteButtonType     = 1;
                 [self _selectToken:tokenView byExtendingSelection:NO];
             }
         }
-        else
-            [self _removeSelectedTokens:nil];
+        // we have to remove unconditionally because the backspace is not propagated anymore starting from commit #26aab29
+        [self _removeSelectedTokens:nil];
     }
     else
     {
@@ -1024,6 +1039,16 @@ CPTokenFieldDeleteButtonType     = 1;
 #if PLATFORM(DOM)
     CPTokenFieldTextDidChangeValue = [self stringValue];
 #endif
+
+    // Has to be enabled, and it also has to be editable or selectable.
+    if (![self isEnabled] || !([self isEditable] || [self isSelectable]))
+        return;
+
+    if ([self isEditable] && !_isEditing)
+    {
+        _isEditing = YES;
+        [self textDidBeginEditing:[CPNotification notificationWithName:CPControlTextDidBeginEditingNotification object:self userInfo:nil]];
+    }
 
     // Leave the default _propagateCurrentDOMEvent setting in place. This might be YES or NO depending
     // on if something that could be a browser shortcut was pressed or not, such as Cmd-R to reload.

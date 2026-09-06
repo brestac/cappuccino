@@ -234,6 +234,19 @@ _CPMenuWindowAttachedMenuBackgroundStyle    = 2;
     // FIXME: This gets called far too often.
     _unconstrainedFrame = CGRectMakeCopy(aFrame);
 
+    // If we are a submenu and we are being displayed off the right of the screen,
+    // we should try and display on the left of our supermenu.
+    var supermenu = [[self menu] supermenu];
+    if (supermenu && (CGRectGetMaxX(_unconstrainedFrame) > CGRectGetMaxX(_constraintRect)))
+    {
+        var supermenuWindow = supermenu._menuWindow;
+        if (supermenuWindow)
+        {
+            var supermenuFrame = [supermenuWindow frame];
+            _unconstrainedFrame.origin.x = CGRectGetMinX(supermenuFrame) - CGRectGetWidth(_unconstrainedFrame);
+        }
+    }
+
     var constrainedFrame = CGRectIntersection(_unconstrainedFrame, _constraintRect),
         marginInset = [_menuView valueForThemeAttribute:@"menu-window-margin-inset"],
         scrollIndicatorHeight = [_menuView valueForThemeAttribute:@"menu-window-scroll-indicator-height"];
@@ -420,7 +433,7 @@ _CPMenuWindowAttachedMenuBackgroundStyle    = 2;
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation _CPMenuWindow (CSSTheming)
 
@@ -433,7 +446,7 @@ _CPMenuWindowAttachedMenuBackgroundStyle    = 2;
 
 @end
 
-#pragma mark -
+// MARK: -
 
 /*
     @ignore
@@ -604,7 +617,7 @@ _CPMenuWindowAttachedMenuBackgroundStyle    = 2;
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation _CPMenuView (CSSTheming)
 

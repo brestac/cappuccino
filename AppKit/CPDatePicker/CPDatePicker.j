@@ -82,8 +82,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Theme methods
+// MARK: -
+// MARK: Theme methods
 
 + (CPString)defaultThemeClass
 {
@@ -174,8 +174,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Binding methods
+// MARK: -
+// MARK: Binding methods
 
 + (Class)_binderClassForBinding:(CPString)theBinding
 {
@@ -200,8 +200,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Init methods
+// MARK: -
+// MARK: Init methods
 
 - (id)initWithFrame:(CGRect)aFrame
 {
@@ -243,6 +243,30 @@ CPEraDatePickerElementFlag              = 0x0100;
 - (void)_createComponents
 {
     _isTextual = (_datePickerStyle == CPTextFieldAndStepperDatePickerStyle) || (_datePickerStyle == CPTextFieldDatePickerStyle);
+    if (_datePickerComponent)
+    {
+        [_datePickerComponent removeFromSuperview];
+
+        _datePickerComponent = nil;
+    }
+
+    _datePickerComponent = [[(_isTextual ? _CPDatePickerTextField : _CPDatePickerCalendar) alloc] initWithFrame:[self bounds] withDatePicker:self];
+
+    [_datePickerComponent setDateValue:_dateValue];
+    [_datePickerComponent setControlSize:[self controlSize]];
+    [_datePickerComponent setDatePickerElements:_datePickerElements];
+
+    // FIXME: Don't know why but next line will cause theme compilation to fail...
+    // Workaround: added "if PLATFORM(DOM)"
+#if PLATFORM(DOM)
+    [_datePickerComponent setEnabled:[self isEnabled]];
+#endif
+
+    if (_isTextual)
+        // We need to transmit text color to the text field version (Cocoa doesn't permit adapting the calendar view text color)
+        [_datePickerComponent setTextColor:[self textColor]];
+
+    [self addSubview:_datePickerComponent];
 
     if (_datePickerComponent)
     {
@@ -271,8 +295,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Control Size
+// MARK: -
+// MARK: Control Size
 
 - (void)setControlSize:(CPControlSize)aControlSize
 {
@@ -285,8 +309,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Delegate methods
+// MARK: -
+// MARK: Delegate methods
 
 /*! Set the delegate of the datePicker
     @param aDelegate delegate of the datePicker
@@ -302,8 +326,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark Layout method
+// MARK: -
+// MARK: Layout method
 
 /*! Layout the subviews
 */
@@ -313,8 +337,8 @@ CPEraDatePickerElementFlag              = 0x0100;
     [_datePickerComponent setNeedsDisplay:YES];
 }
 
-#pragma mark -
-#pragma mark Setter
+// MARK: -
+// MARK: Setter
 
 /*! Return the objectValue of the datePicker. The objectValue should take the timeZoneEffect
 */
@@ -651,8 +675,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark First responder methods
+// MARK: -
+// MARK: First responder methods
 
 /*! Return YES if style is set to CPTextFieldAndStepperDatePickerStyle or CPTextFieldDatePickerStyle
 */
@@ -689,8 +713,8 @@ CPEraDatePickerElementFlag              = 0x0100;
 }
 
 
-#pragma mark -
-#pragma mark getter
+// MARK: -
+// MARK: getter
 
 /*!
     Returns \c YES if the textfield is bezeled.
@@ -723,8 +747,8 @@ CPEraDatePickerElementFlag              = 0x0100;
     return [[_locale objectForKey:CPLocaleCountryCode] isEqualToString:@"US"];
 }
 
-#pragma mark -
-#pragma mark Key event
+// MARK: -
+// MARK: Key event
 
 /*! Key down event
     @param anEvent

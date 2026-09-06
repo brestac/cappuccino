@@ -51,6 +51,7 @@
 @class CALayer
 @class CPLayoutConstraintEngine
 @class _CPCibCustomView
+@class CPBinder
 
 @global appkit_tag_dom_elements
 
@@ -241,7 +242,7 @@ var CPViewHighDPIDrawingEnabled = YES;
     JSObject            _ephemeralSubviews;
 
     JSObject            _ephemeralSubviewsForNames;
-    CPSet               _ephereralSubviews;
+    CPSet               _ephemeralSubviews;
 
     // Key View Support
     CPView              _nextKeyView;
@@ -686,7 +687,8 @@ var CPViewHighDPIDrawingEnabled = YES;
 
     // We will have to adjust the z-index of all views starting at this index.
     var count = _subviews.length,
-        lastWindow;
+        lastWindow,
+        isNewAddOrMove = aSubview._superview !== self;
 
     // Dirty the key view loop, in case the window wants to auto recalculate it
     [[self window] _dirtyKeyViewLoop];
@@ -745,6 +747,11 @@ var CPViewHighDPIDrawingEnabled = YES;
 #endif
     }
 
+#if PLATFORM(DOM)
+    var origin = aSubview._frame.origin;
+    CPDOMDisplayServerSetStyleLeftTop(aSubview._DOMElement, _boundsTransform, origin.x, origin.y);
+#endif
+
     [aSubview setNextResponder:self];
     [aSubview _scaleSizeUnitSquareToSize:[self _hierarchyScaleSize]];
 
@@ -756,6 +763,9 @@ var CPViewHighDPIDrawingEnabled = YES;
 
     if (!_window && lastWindow)
         [aSubview _setWindow:nil];
+
+    if (isNewAddOrMove)
+        [aSubview _postViewDidAppearNotification];
 
     // This method might be called before we are fully unarchived, in which case the theme state isn't set up yet
     // and none of the below matters anyhow.
@@ -824,6 +834,7 @@ var CPViewHighDPIDrawingEnabled = YES;
     // If the view is not hidden and one of its ancestors is hidden,
     // notify the view that it is now unhidden.
     [self _setSuperview:nil];
+    [self _postViewDidDisappearNotification];
 
     [self _notifyWindowDidResignKey];
     [self _notifyViewDidResignFirstResponder];
@@ -1535,6 +1546,9 @@ var CPViewHighDPIDrawingEnabled = YES;
         _inverseBoundsTransform = nil;
     }
 
+    if (_layer)
+        [_layer _owningViewBoundsChanged];
+
 #if PLATFORM(DOM)
     var index = _subviews.length;
 
@@ -1591,6 +1605,27 @@ var CPViewHighDPIDrawingEnabled = YES;
         origin.y *= size.height / frameSize.height;
     }
 
+    var newScaleSize;
+
+    if (size && size.width !== 0 && size.height !== 0 && frameSize)
+        newScaleSize = CGSizeMake(frameSize.width / size.width, frameSize.height / size.height);
+    else
+        newScaleSize = CGSizeMake(1.0, 1.0);
+
+    // Only update and propagate if the scale factor has actually changed
+    if (!CGSizeEqualToSize(_scaleSize, newScaleSize))
+    {
+        [self willChangeValueForKey:@"scaleSize"];
+        _scaleSize = newScaleSize;
+        _isScaled = (_scaleSize.width !== 1.0 || _scaleSize.height !== 1.0);
+        [self didChangeValueForKey:@"scaleSize"];
+
+        [self _scaleSizeUnitSquareToSize:CGSizeMake(1.0, 1.0)];
+    }
+
+    if (_layer)
+        [_layer _owningViewBoundsChanged];
+
     if (_postsBoundsChangedNotifications && !_inhibitFrameAndBoundsChangedNotifications)
         [CachedNotificationCenter postNotificationName:CPViewBoundsDidChangeNotification object:self];
 
@@ -1601,7 +1636,6 @@ var CPViewHighDPIDrawingEnabled = YES;
         [self _updateTrackingAreasWithRecursion:YES];
 }
 
-
 /*!
     Notifies subviews that the superview changed size.
     @param aSize the size of the old superview
@@ -1610,7 +1644,7 @@ var CPViewHighDPIDrawingEnabled = YES;
 {
     var mask = [self autoresizingMask];
 
-    if (mask === CPViewNotSizable)
+    if ((mask === CPViewNotSizable) || !_superview)
         return;
 
     var frame = _superview._frame,
@@ -1853,11 +1887,7 @@ var CPViewHighDPIDrawingEnabled = YES;
 
     _superview = aSuperview;
 
-    if (hasOldSuperview)
-        [self _postViewDidDisappearNotification];
-
-    if (hasNewSuperview)
-        [self _postViewDidAppearNotification];
+    // Notifications are now posted manually from _insertSubview and _removeFromSuperview
 }
 
 - (void)_recursiveLostHiddenAncestor
@@ -2323,6 +2353,7 @@ var CPViewHighDPIDrawingEnabled = YES;
             {
                 CPDOMDisplayServerSetStyleLeftTop(_DOMImageParts[partIndex], NULL, left, 0.0);
                 CPDOMDisplayServerSetStyleSize(_DOMImageParts[partIndex], width, _DOMImageSizes[1].height);
+                _DOMImageParts[partIndex].style.backgroundRepeat = "repeat-x";
                 partIndex++;
             }
             if (_DOMImageSizes[2])
@@ -2334,6 +2365,7 @@ var CPViewHighDPIDrawingEnabled = YES;
             {
                 CPDOMDisplayServerSetStyleLeftTop(_DOMImageParts[partIndex], NULL, 0.0, top);
                 CPDOMDisplayServerSetStyleSize(_DOMImageParts[partIndex], _DOMImageSizes[3].width, height);
+                _DOMImageParts[partIndex].style.backgroundRepeat = "repeat-y";
                 partIndex++;
             }
             if (_DOMImageSizes[4])
@@ -2346,6 +2378,7 @@ var CPViewHighDPIDrawingEnabled = YES;
             {
                 CPDOMDisplayServerSetStyleRightTop(_DOMImageParts[partIndex], NULL, 0.0, top);
                 CPDOMDisplayServerSetStyleSize(_DOMImageParts[partIndex], _DOMImageSizes[5].width, height);
+                _DOMImageParts[partIndex].style.backgroundRepeat = "repeat-y";
                 partIndex++;
             }
             if (_DOMImageSizes[6])
@@ -2357,6 +2390,7 @@ var CPViewHighDPIDrawingEnabled = YES;
             {
                 CPDOMDisplayServerSetStyleLeftBottom(_DOMImageParts[partIndex], NULL, left, 0.0);
                 CPDOMDisplayServerSetStyleSize(_DOMImageParts[partIndex], width, _DOMImageSizes[7].height);
+                _DOMImageParts[partIndex].style.backgroundRepeat = "repeat-x";
                 partIndex++;
             }
             if (_DOMImageSizes[8])
@@ -2750,7 +2784,7 @@ setBoundsOrigin:
 */
 - (void)_scaleSizeUnitSquareToSize:(CGSize)aSize
 {
-    _hierarchyScaleSize = CGSizeMakeCopy([_superview _hierarchyScaleSize]);
+    _hierarchyScaleSize = _superview ? CGSizeMakeCopy([_superview _hierarchyScaleSize]) : CGSizeMake(1.0, 1.0);
 
     if (_isScaled)
     {
@@ -3363,7 +3397,8 @@ setBoundsOrigin:
     {
         _layer._owningView = nil;
 #if PLATFORM(DOM)
-        _DOMElement.removeChild(_layer._DOMElement);
+        if (_layer._DOMElement && _layer._DOMElement.parentNode === _DOMElement)
+            _DOMElement.removeChild(_layer._DOMElement);
 #endif
     }
 
@@ -3371,33 +3406,56 @@ setBoundsOrigin:
 
     if (_layer)
     {
-        var bounds = CGRectMakeCopy([self bounds]);
-
         [_layer _setOwningView:self];
+        [_layer setFrame:[self bounds]]; // Sync layer frame with view bounds
 
 #if PLATFORM(DOM)
         _layer._DOMElement.style.zIndex = 100;
-
         _DOMElement.appendChild(_layer._DOMElement);
 #endif
     }
 }
 
 /*!
-    Returns the core animation layer used by the receiver.
+    Returns the core animation layer used by the receiver and creates one if necessary.
 */
 - (CALayer)layer
 {
+    if (_wantsLayer && !_layer)
+    {
+        var layer = [[CALayer alloc] init];
+        [self setLayer:layer];
+        [self setNeedsLayout:YES];
+        [self setNeedsDisplay:YES];
+    }
+
     return _layer;
 }
 
 /*!
     Sets whether the receiver wants a core animation layer.
-    @param \c YES means the receiver wants a layer.
+    @param aFlag \c YES means the receiver wants a layer.
 */
 - (void)setWantsLayer:(BOOL)aFlag
 {
-    _wantsLayer = !!aFlag;
+    aFlag = !!aFlag;
+
+    if (_wantsLayer === aFlag)
+        return;
+
+    _wantsLayer = aFlag;
+
+    if (_wantsLayer)
+    {
+        // Accessing the layer will create it if it doesn't exist.
+        [self layer];
+    }
+    else
+    {
+        // Remove the layer if we no longer want it.
+        if (_layer)
+            [self setLayer:nil];
+    }
 }
 
 /*!
@@ -3407,6 +3465,38 @@ setBoundsOrigin:
 - (BOOL)wantsLayer
 {
     return _wantsLayer;
+}
+
+/*!
+    Rotates the view's visual representation by a given angle (in degrees) around its center point.
+
+    This method achieves the rotation by applying a transform directly to the view's backing CALayer.
+    Because this is a direct layer manipulation, the view's own `frame` property is not updated to
+    reflect the new visual bounding box. Consequently, a `CPViewBoundsDidChangeNotification` is
+    **not** posted by this method. Note that this is a deviation from Cocoa's behavior.
+
+    This method requires the view to be layer-backed. If the view is not
+    already layer-backed, this method will automatically set wantsLayer to YES.
+    @param angle The angle in degrees to rotate the view.
+*/
+- (void)rotateByAngle:(CGFloat)angle
+{
+    // Ensure the view is layer-backed
+    [self setWantsLayer:YES];
+
+    var layer = [self layer];
+
+    if (!layer)
+        return;
+
+    // Convert degrees to radians for the transform
+    var radians = angle * Math.PI / 180.0;
+
+    var rotationTransform = CGAffineTransformMakeRotation(radians);
+    var currentTransform = [layer affineTransform];
+    var newTransform = CGAffineTransformConcat(currentTransform, rotationTransform);
+
+    [layer setAffineTransform:newTransform];
 }
 
 @end
@@ -3448,7 +3538,7 @@ setBoundsOrigin:
 
 @implementation CPView (Theming)
 
-#pragma mark Override
+// MARK: Override
 
 - (BOOL)setThemeState:(ThemeState)aState
 {
@@ -3485,7 +3575,7 @@ setBoundsOrigin:
 }
 
 
-#pragma mark First responder
+// MARK: First responder
 
 - (BOOL)becomeFirstResponder
 {
@@ -3547,7 +3637,7 @@ setBoundsOrigin:
         [_subviews[count] _notifyWindowDidResignKey];
 }
 
-#pragma mark Theme Attributes
+// MARK: Theme Attributes
 
 - (void)_setThemeIncludingDescendants:(CPTheme)aTheme
 {
@@ -3882,6 +3972,16 @@ var CPAppearanceVibrantDark = [CPAppearance appearanceNamed:CPAppearanceNameVibr
         [owners[i] updateTrackingAreas];
 }
 
+// needed by CPWindow's releasedWhenClosed property
+- (void)_releaseRecursively
+{
+    [_subviews makeObjectsPerformSelector:@selector(_releaseRecursively)];
+
+    [self _removeObservers];
+    [CPBinder unbindAllForObject:self];
+    [self removeFromSuperview];
+}
+
 @end
 
 var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
@@ -3908,7 +4008,8 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
     CPViewConstraints               = @"CPViewConstraints",
     CPHuggingPriority               = @"CPHuggingPriority",
     CPAntiCompressionPriority       = @"CPAntiCompressionPriority",
-    CPDoNotTranslateAutoresizingMask = @"CPDoNotTranslateAutoresizingMask";
+    CPDoNotTranslateAutoresizingMask = @"CPDoNotTranslateAutoresizingMask",
+    CPViewWantsLayerKey             = @"CPViewWantsLayerKey";
 
 @implementation CPView (CPCoding)
 
@@ -3931,16 +4032,21 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
     // Also decode these "early".
     _frame = [aCoder decodeRectForKey:CPViewFrameKey];
     _bounds = [aCoder decodeRectForKey:CPViewBoundsKey];
+    _scaleSize = [aCoder containsValueForKey:CPViewScaleKey] ? [aCoder decodeSizeForKey:CPViewScaleKey] : CGSizeMake(1.0, 1.0);
+    _hierarchyScaleSize = [aCoder containsValueForKey:CPViewSizeScaleKey] ? [aCoder decodeSizeForKey:CPViewSizeScaleKey] : CGSizeMake(1.0, 1.0);
+    _isScaled = [aCoder containsValueForKey:CPViewIsScaledKey] ? [aCoder decodeBoolForKey:CPViewIsScaledKey] : NO;
+    _subviews = @[];
+
+    // Trying to fix "not ready" views
+    _trackingAreas = [aCoder decodeObjectForKey:CPViewTrackingAreasKey] || @[];
+
+    [self _decodeThemeObjectsWithCoder:aCoder];
+    [self setAppearance:[aCoder decodeObjectForKey:CPViewAppearanceKey]];
 
     self = [super initWithCoder:aCoder];
 
     if (self)
     {
-        _trackingAreas = [aCoder decodeObjectForKey:CPViewTrackingAreasKey];
-
-        if (!_trackingAreas)
-            _trackingAreas = [];
-
         // We have to manually check because it may be 0, so we can't use ||
         _tag = [aCoder containsValueForKey:CPViewTagKey] ? [aCoder decodeIntForKey:CPViewTagKey] : -1;
         _identifier = [aCoder decodeObjectForKey:CPReuseIdentifierKey];
@@ -3948,7 +4054,6 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
         _superview = [aCoder decodeObjectForKey:CPViewSuperviewKey];
         // We have to manually add the subviews so that they will receive
         // viewWillMoveToSuperview: and viewDidMoveToSuperview:
-        _subviews = [];
 
         var subviews = [aCoder decodeObjectForKey:CPViewSubviewsKey] || [];
 
@@ -3976,10 +4081,6 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
 
         if (_toolTip)
             [self _installToolTipEventHandlers];
-
-        _scaleSize = [aCoder containsValueForKey:CPViewScaleKey] ? [aCoder decodeSizeForKey:CPViewScaleKey] : CGSizeMake(1.0, 1.0);
-        _hierarchyScaleSize = [aCoder containsValueForKey:CPViewSizeScaleKey] ? [aCoder decodeSizeForKey:CPViewSizeScaleKey] : CGSizeMake(1.0, 1.0);
-        _isScaled = [aCoder containsValueForKey:CPViewIsScaledKey] ? [aCoder decodeBoolForKey:CPViewIsScaledKey] : NO;
 
         // DOM SETUP
 #if PLATFORM(DOM)
@@ -4010,8 +4111,11 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
             _opacity = 1.0;
 
         [self setBackgroundColor:[aCoder decodeObjectForKey:CPViewBackgroundColorKey]];
+
+        if ([aCoder containsValueForKey:CPViewWantsLayerKey])
+            [self setWantsLayer:[aCoder decodeBoolForKey:CPViewWantsLayerKey]];
+
         [self _setupViewFlags];
-        [self _decodeThemeObjectsWithCoder:aCoder];
 
         [self setAppearance:[aCoder decodeObjectForKey:CPViewAppearanceKey]];
         // Set the current appearance to something that can't be the correct one so it will recalculate it at the first layout.
@@ -4031,6 +4135,7 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
         if ([aCoder containsValueForKey:CPAntiCompressionPriority])
             _compressionPriorities = [aCoder decodeSizeForKey:CPAntiCompressionPriority];
 
+        [self updateTrackingAreas];
         [self setNeedsDisplay:YES];
         [self setNeedsLayout];
     }
@@ -4110,6 +4215,9 @@ var CPViewAutoresizingMaskKey       = @"CPViewAutoresizingMask",
 
     if (_identifier)
         [aCoder encodeObject:_identifier forKey:CPReuseIdentifierKey];
+
+    if (_wantsLayer)
+        [aCoder encodeBool:_wantsLayer forKey:CPViewWantsLayerKey];
 
     [aCoder encodeSize:[self scaleSize] forKey:CPViewScaleKey];
     [aCoder encodeSize:[self _hierarchyScaleSize] forKey:CPViewSizeScaleKey];

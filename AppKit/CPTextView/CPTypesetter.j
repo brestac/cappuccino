@@ -6,7 +6,7 @@
  *  All modifications copyright Daniel Boehringer 2013.
  *  Extensive code formatting and review by Andrew Hankinson
  *  Based on original work by
- *  Emmanuel Maillard on 27/02/2010.
+ *  Created by Emmanuel Maillard on 27/02/2010.
  *  Copyright Emmanuel Maillard 2010.
  *
  * This library is free software; you can redistribute it and/or
@@ -30,6 +30,9 @@
 @import "CPTextStorage.j"
 @import "CPFont.j"
 
+@global CPBaselineOffsetAttributeName
+@global CPSuperscriptAttributeName
+
 // forward declare these classes for type matching
 @class CPLayoutManager
 @class CPTextContainer
@@ -51,8 +54,8 @@ var CPSystemTypesetterFactory,
 @implementation CPTypesetter : CPObject
 
 
-#pragma mark -
-#pragma mark Class methods
+// MARK: -
+// MARK: Class methods
 
 + (void)initialize
 {
@@ -119,8 +122,8 @@ var CPSystemTypesetterFactory,
 }
 
 
-#pragma mark -
-#pragma mark Class methods
+// MARK: -
+// MARK: Class methods
 
 + (id)sharedInstance
 {
@@ -135,31 +138,30 @@ var CPSystemTypesetterFactory,
     return [_layoutManager textContainers];
 }
 
+// Retrieves correct CPTextTab stop accounting for custom stops and default intervals
 - (CPTextTab)textTabForWidth:(double)aWidth writingDirection:(CPWritingDirection)direction
 {
-    var tabStops = [_currentParagraph tabStops];
+    var tabStops = [_currentParagraph tabStops],
+        defaultInterval = [_currentParagraph defaultTabInterval] || 28.0;
 
-    if (!tabStops)
-        tabStops = [CPParagraphStyle _defaultTabStops];
+    var l = tabStops ? [tabStops count] : 0;
 
-    var l = tabStops.length;
-
-    if (aWidth > tabStops[l - 1]._location)
-        return nil;
-
-    for (var i = l - 1; i >= 0; i--)
+    // 1. If custom tab stops exist ahead of current position, use the first one encountered
+    if (l > 0)
     {
-        if (aWidth > tabStops[i]._location)
+        for (var i = 0; i < l; i++)
         {
-            if (i + 1 < l)
-                return tabStops[i + 1];
+            var tab = [tabStops objectAtIndex:i];
+
+            if ([tab location] > aWidth)
+                return tab;
         }
     }
 
-    if (i === -1)
-        return tabStops[0];
+    // 2. Otherwise (or when all custom tab stops are behind the text), advance to the next default interval
+    var nextLocation = (Math.floor(aWidth / defaultInterval) + 1) * defaultInterval;
 
-    return nil;
+    return [[CPTextTab alloc] initWithType:CPLeftTextAlignment location:nextLocation];
 }
 
 - (BOOL)_flushRange:(CPRange)lineRange
@@ -199,7 +201,7 @@ var CPSystemTypesetterFactory,
     [_layoutManager setLocation:CGPointMake(myX, _lineBase) forStartOfGlyphRange:lineRange];
     [_layoutManager _setAdvancements:advancements forGlyphRange:lineRange];
 
-    //fix the _lineFragments when fontsizes differ
+    // fix the _lineFragments when fontsizes differ
     var l = _lineFragments.length;
 
     for (var i = 0 ; i < l ; i++)
@@ -245,7 +247,7 @@ var CPSystemTypesetterFactory,
         isTabStop = NO,
         isAttachment = NO,
         isWordWrapped = NO,
-        numberOfGlyphs= [_textStorage length],
+        numberOfGlyphs = [_textStorage length],
         leading,
         numLines = 0,
         theString = [_textStorage string],
@@ -263,6 +265,14 @@ var CPSystemTypesetterFactory,
         currentParagraphMaximumLineHeight,
         currentParagraphLineSpacing;
 
+    // Track physical line starts to prevent overwriting lineOrigin.x in tab segments
+    var isStartOfPhysicalLine = YES;
+
+    // Track paragraph indents and margins
+    var isFirstLineOfLayout = YES,
+        isFirstLineOfParagraph = YES,
+        rightMargin = containerSizeWidth;
+
     if (glyphIndex > 0)
         lineOrigin = CGPointCreateCopy([_layoutManager lineFragmentRectForGlyphAtIndex:glyphIndex effectiveRange:nil].origin);
     else if ([_layoutManager extraLineFragmentTextContainer])
@@ -279,7 +289,7 @@ var CPSystemTypesetterFactory,
 
     for (; numLines != maxNumLines && glyphIndex < numberOfGlyphs; glyphIndex++)
     {
-        // check whether there any change in the attributes from here on
+        // check whether there is any change in the attributes from here on
         if (!CPLocationInRange(glyphIndex, _attributesRange))
         {
             _currentAttributes = [_textStorage attributesAtIndex:glyphIndex effectiveRange:_attributesRange];
@@ -289,12 +299,85 @@ var CPSystemTypesetterFactory,
             currentParagraphMaximumLineHeight = [_currentParagraph maximumLineHeight];
             currentParagraphLineSpacing = [_currentParagraph lineSpacing];
 
+            // Recalculate right margin on paragraph style change
+            var tailIndent = [_currentParagraph tailIndent];
+            if (tailIndent > 0.0)
+                rightMargin = tailIndent;
+            else if (tailIndent < 0.0)
+                rightMargin = containerSizeWidth + tailIndent;
+            else
+                rightMargin = containerSizeWidth;
+
+            // If we are at the start of a physical line, we update lineOrigin.x
+            if (isStartOfPhysicalLine)
+            {
+                if (glyphIndex > 0)
+                {
+                    var prevChar = theString.charCodeAt(glyphIndex - 1);
+                    isFirstLineOfParagraph = (prevChar === 10 || prevChar === 13);
+                }
+                else
+                {
+                    isFirstLineOfParagraph = YES;
+                }
+                lineOrigin.x = isFirstLineOfParagraph ? [_currentParagraph firstLineHeadIndent] : [_currentParagraph headIndent];
+                isFirstLineOfLayout = NO;
+            }
+
+            // Handle the layout's very first line indentation
+            if (isFirstLineOfLayout)
+            {
+                if (glyphIndex > 0)
+                {
+                    var prevChar = theString.charCodeAt(glyphIndex - 1);
+                    isFirstLineOfParagraph = (prevChar === 10 || prevChar === 13);
+                }
+                else
+                {
+                    isFirstLineOfParagraph = YES;
+                }
+                lineOrigin.x = isFirstLineOfParagraph ? [_currentParagraph firstLineHeadIndent] : [_currentParagraph headIndent];
+                isFirstLineOfLayout = NO;
+            }
+
             if (!currentFont)
                 currentFont = [_textStorage font] || [CPFont systemFontOfSize:12.0];
 
-            ascent = [currentFont ascender];
-            descent = [currentFont descender];
-            leading = (ascent - descent) * 0.2; // FAKE leading
+            // Safely retrieve and validate CPBaselineOffsetAttributeName
+            var baselineOffset = [_currentAttributes objectForKey:CPBaselineOffsetAttributeName];
+            if (baselineOffset === nil || baselineOffset === undefined || typeof baselineOffset !== "number")
+                baselineOffset = 0.0;
+
+            // Safely retrieve and validate CPSuperscriptAttributeName
+            var superscript = [_currentAttributes objectForKey:CPSuperscriptAttributeName];
+            if (superscript === nil || superscript === undefined || typeof superscript !== "number")
+                superscript = 0;
+
+            if (superscript !== 0)
+            {
+                var size = [currentFont size],
+                    scaledSize = size * 0.65,
+                    fontName = [currentFont familyName],
+                    isBold = [currentFont isBold],
+                    isItalic = [currentFont isItalic];
+
+                currentFont = [CPFont _fontWithName:fontName size:scaledSize bold:isBold italic:isItalic];
+
+                if (baselineOffset === 0.0)
+                {
+                    if (superscript > 0)
+                        baselineOffset = size * 0.35;
+                    else
+                        baselineOffset = -size * 0.15;
+                }
+            }
+
+            var fontAscent = [currentFont ascender] || 0.0,
+                fontDescent = [currentFont descender] || 0.0;
+
+            ascent = fontAscent + baselineOffset;
+            descent = fontDescent + baselineOffset;
+            leading = (fontAscent - fontDescent) * 0.2; // FAKE leading
 
             currentFontLineHeight = ascent - descent + leading;
 
@@ -307,19 +390,26 @@ var CPSystemTypesetterFactory,
 
         }
 
-        if (currentFontLineHeight > _lineHeight)
-            _lineHeight = currentFontLineHeight;
+        // Clean bounds logic to prevent NaN and layout calculation overhead
+        var currentAscent = (ascent === undefined || isNaN(ascent)) ? 0.0 : ascent,
+            currentLineHeight = (currentFontLineHeight === undefined || isNaN(currentFontLineHeight)) ? 12.0 : currentFontLineHeight;
 
-        if (ascent > _lineBase)
-            _lineBase = ascent;
+        if (currentLineHeight > _lineHeight)
+            _lineHeight = currentLineHeight;
+
+        if (currentAscent > _lineBase)
+            _lineBase = currentAscent;
 
         lineRange.length++;
         measuringRange.length++;
 
-        var currentCharCode = theString.charCodeAt(glyphIndex),  // use pure javascript methods for performance reasons
-            rangeWidth = [theString.substr(measuringRange.location, measuringRange.length) _sizeWithFont:currentFont inWidth:NULL].width + currentAnchor;
+        // We are processing characters, so we are no longer at the start of a physical line
+        isStartOfPhysicalLine = NO;
 
-        switch (currentCharCode)    // faster than sending actionForControlCharacterAtIndex: called for each char.
+        var currentCharCode = theString.charCodeAt(glyphIndex),
+            rangeWidth = [theString.substr(measuringRange.location, measuringRange.length) sizeWithFont:currentFont inWidth:NULL].width + currentAnchor;
+
+        switch (currentCharCode)
         {
             case CPAttachmentCharacter:
             {
@@ -351,20 +441,70 @@ var CPSystemTypesetterFactory,
             }
             case 9: // '\t'
             {
-                var nextTab = [self textTabForWidth:rangeWidth + lineOrigin.x writingDirection:0];
+                // Measure against the actual text position before the tab stop
+                var nextTab = [self textTabForWidth:prevRangeWidth + lineOrigin.x writingDirection:0];
 
                 isTabStop = YES;
 
                 if (nextTab)
-                    rangeWidth = nextTab._location - lineOrigin.x;
+                {
+                    // Look-ahead to measure the width of the incoming text segment for alignment
+                    var nextSegmentWidth = 0.0,
+                        tempIndex = glyphIndex + 1,
+                        segmentString = "";
+
+                    while (tempIndex < numberOfGlyphs)
+                    {
+                        var nextCharCode = theString.charCodeAt(tempIndex);
+                        if (nextCharCode === 9 || nextCharCode === 10 || nextCharCode === 13)
+                            break;
+                        segmentString += theString.charAt(tempIndex);
+                        tempIndex++;
+                    }
+
+                    if (segmentString.length > 0)
+                        nextSegmentWidth = [segmentString sizeWithFont:currentFont inWidth:NULL].width;
+
+                    var tabLocation = [nextTab location],
+                        tabAlignment = [nextTab alignment];
+
+                    // Mathematically offset the tab character's right boundary
+                    if (tabAlignment === CPCenterTextAlignment)
+                    {
+                        rangeWidth = (tabLocation - nextSegmentWidth / 2.0) - lineOrigin.x;
+                    }
+                    else if (tabAlignment === CPRightTextAlignment)
+                    {
+                        rangeWidth = (tabLocation - nextSegmentWidth) - lineOrigin.x;
+                    }
+                    else // Left align tab stop
+                    {
+                        rangeWidth = tabLocation - lineOrigin.x;
+                    }
+
+                    // Enforce a minimum safety spacer width to avoid character overlapping
+                    var minRangeWidth = prevRangeWidth + 5.0;
+                    if (rangeWidth < minRangeWidth)
+                        rangeWidth = minRangeWidth;
+                }
                 else
-                    rangeWidth += 28;   //FIXME
-            }  // fallthrough intentional
+                {
+                    rangeWidth = prevRangeWidth + 28.0; // standard fallback spacer
+                }
+                break;
+            }
             case 32: // ' '
                 wrapRange = CPMakeRangeCopy(lineRange);
                 wrapWidth = rangeWidth;
                 wrapRange._height = _lineHeight;
                 wrapRange._base = _lineBase;
+                
+                if (theString.charCodeAt(glyphIndex + 1) !== 32)
+                {
+                    currentAnchor = rangeWidth;
+                    measuringRange = CPMakeRange(glyphIndex + 1, 0);
+                }
+                
                 break;
 
             case 10:
@@ -375,7 +515,8 @@ var CPSystemTypesetterFactory,
         advancements.push({width: rangeWidth - prevRangeWidth, height: ascent, descent: descent});
         prevRangeWidth = _lineWidth = rangeWidth;
 
-        if (lineOrigin.x + rangeWidth > containerSizeWidth)
+        // Wrap lines against the tail indent (rightMargin) instead of container boundaries
+        if (lineOrigin.x + rangeWidth > rightMargin)
         {
             if (wrapWidth)
             {
@@ -387,7 +528,7 @@ var CPSystemTypesetterFactory,
 
             isNewline = YES;
             isWordWrapped = YES;
-            glyphIndex = CPMaxRange(lineRange) - 1;  // start the line starts directly at current character
+            glyphIndex = CPMaxRange(lineRange) - 1;
         }
 
         if (isNewline || isTabStop || isAttachment)
@@ -419,12 +560,15 @@ var CPSystemTypesetterFactory,
                     containerSizeHeight = containerSize.height;
                 }
 
-                lineOrigin.x = 0;
+                isFirstLineOfParagraph = !isWordWrapped;
+                lineOrigin.x = isFirstLineOfParagraph ? [_currentParagraph firstLineHeadIndent] : [_currentParagraph headIndent];
+
                 numLines++;
                 isNewline = NO;
                 _lineFragments = [];
                 _lineHeight    = 0;
-                _lineBase      = ascent;
+                _lineBase      = 0;
+                isStartOfPhysicalLine = YES;
             }
 
             isTabStop       = NO;
@@ -441,7 +585,7 @@ var CPSystemTypesetterFactory,
         }
     }
 
-    // this is to "flush" the remaining characters
+    // Flush remaining characters
     if (lineRange.length)
         [self _flushRange:lineRange lineOrigin:lineOrigin currentContainer:_currentTextContainer advancements:advancements lineCount:numLines sameLine:NO];
 

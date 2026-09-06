@@ -1,0 +1,139 @@
+@import "CPObject.j"
+@import "CPEnumerator.j"
+@import "CPDictionary.j"
+@import "CPArray.j"
+
+/*!
+   @class CPMapTable
+   @ingroup foundation
+   A mutable collection modeled after NSDictionary that allows for arbitrary
+   objects or values to be used as keys. This implementation uses the native
+   ECMAScript 6 Map object for its underlying storage.
+ */
+@implementation CPMapTable : CPObject
+{
+    // The underlying ES6 Map to store the key-value pairs.
+    id _map;
+}
+
+/*!
+   Initializes a new, empty CPMapTable.
+ */
+- (id)init
+{
+    if (self = [super init])
+    {
+        _map = new Map();
+    }
+
+    return self;
+}
+
+// MARK: -
+// MARK: Accessing Content
+
+/*!
+   Returns the value associated with a given key.
+   @param aKey The key for which to return the corresponding value.
+   @return The value associated with aKey, or nil if no value is associated with aKey.
+ */
+- (id)objectForKey:(id)aKey
+{
+    var value = _map.get(aKey);
+    return value === undefined ? nil : value;
+}
+
+/*!
+   Returns an enumerator object that lets you access each key in the map table.
+   @return A CPEnumerator object for the keys in the map table.
+ */
+- (CPEnumerator)keyEnumerator
+{
+    return [[..._map.keys()] objectEnumerator];
+}
+
+/*!
+   Returns an enumerator object that lets you access each value in the map table.
+   @return A CPEnumerator object for the values in the map table.
+ */
+- (CPEnumerator)objectEnumerator
+{
+    return [[..._map.values()] objectEnumerator];
+}
+
+/*!
+   Returns the number of key-value pairs in the map table.
+   @return The number of entries in the map table.
+ */
+- (unsigned int)count
+{
+    return _map.size;
+}
+
+// MARK: -
+// MARK: Manipulating Content
+
+/*!
+   Adds a given key-value pair to the map table.
+   If aKey already exists in the map table, anObject takes its place.
+   @param anObject The value for aKey.
+   @param aKey The key for anObject.
+ */
+- (void)setObject:(id)anObject forKey:(id)aKey
+{
+    _map.set(aKey, anObject);
+}
+
+/*!
+   Removes a given key and its associated value from the map table.
+   @param aKey The key to remove.
+ */
+- (void)removeObjectForKey:(id)aKey
+{
+    _map.delete(aKey);
+}
+
+/*!
+   Empties the map table of its entries.
+ */
+- (void)removeAllObjects
+{
+    _map.clear();
+}
+
+// MARK: -
+// MARK: Creating a Dictionary Representation
+
+/*!
+ Returns a dictionary representation of the map table.
+ Note: This will only work correctly if all keys are strings.
+
+ @return A CPDictionary containing the entries of the map table.
+ */
+- (CPDictionary)dictionaryRepresentation
+{
+    var dictionary = [CPDictionary dictionary];
+
+    // TODO: Revert to ES6 destructuring in the loop declaration once the
+    // legacy compiler is retired. The legacy parser fails to recognize
+    // `var [key, value]` as a local scope declaration, causing the variables
+    // to leak to the global object and emitting false-positive "uninitialized
+    // global variable" warnings, which is unacceptable for CI hygiene.
+    //
+    // for (var [key, value] of _map.entries())
+    // {
+    //     [dictionary setObject:value forKey:key];
+    // }
+
+    for (var entry of _map.entries())
+    {
+        var key = entry[0],
+        value = entry[1];
+
+        [dictionary setObject:value forKey:key];
+    }
+
+    return dictionary;
+}
+
+@end

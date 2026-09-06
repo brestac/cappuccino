@@ -34,6 +34,8 @@
 @global CPStringPboardType
 @global CPCursor
 
+@global document
+
 @protocol CPTextFieldDelegate <CPControlTextEditingDelegate>
 
 @end
@@ -66,7 +68,11 @@ var CPTextFieldDOMCurrentElement = nil,
     CPTextFieldCachedDragFunction = nil,
     CPTextFieldBlurHandler = nil,
     CPTextFieldInputFunction = nil,
-    CPTexFieldCurrentCSSSelectableField = nil;
+    CPTexFieldCurrentCSSSelectableField = nil,
+    CPTextFieldLastValidationFailureEvent = nil,
+    CPTextFieldLastValidationFailureString = nil,
+    CPTextFieldLastValidationFailureField = nil,
+    CPTextFieldLastValidationFailureResult = NO;
 
 var CPSecureTextFieldCharacter = "\u2022";
 
@@ -239,8 +245,8 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
 }
 
 
-#pragma mark -
-#pragma mark Control Size
+// MARK: -
+// MARK: Control Size
 
 - (void)setControlSize:(CPControlSize)aControlSize
 {
@@ -251,7 +257,7 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
 }
 
 
-#pragma mark -
+// MARK: -
 
 #if PLATFORM(DOM)
 - (DOMElement)_inputElement
@@ -330,7 +336,8 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
                                            characters:nil
                           charactersIgnoringModifiers:nil
                                             isARepeat:NO
-                                              keyCode:nil];
+                                              keyCode:nil
+                                          isActionKey:NO];
 
             [CPTextFieldInputOwner keyUp:cappEvent];
 
@@ -374,7 +381,7 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
     return self;
 }
 
-#pragma mark Controlling Editability and Selectability
+// MARK: Controlling Editability and Selectability
 
 /*!
     Sets whether or not the receiver text field can be edited. If NO, any
@@ -994,7 +1001,26 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
         var acceptInvalidValue = NO;
 
         if (_implementedDelegateMethods & CPTextFieldDelegate_control_didFailToFormatString_errorDescription_)
-            acceptInvalidValue = [_delegate control:self didFailToFormatString:aValue errorDescription:error];
+        {
+            var currentEvent = [CPApp currentEvent];
+
+            if (currentEvent &&
+                CPTextFieldLastValidationFailureField === self &&
+                CPTextFieldLastValidationFailureString === aValue &&
+                CPTextFieldLastValidationFailureEvent === currentEvent)
+            {
+                acceptInvalidValue = CPTextFieldLastValidationFailureResult;
+            }
+            else
+            {
+                acceptInvalidValue = [_delegate control:self didFailToFormatString:aValue errorDescription:error];
+
+                CPTextFieldLastValidationFailureField = self;
+                CPTextFieldLastValidationFailureString = aValue;
+                CPTextFieldLastValidationFailureEvent = currentEvent;
+                CPTextFieldLastValidationFailureResult = acceptInvalidValue;
+            }
+        }
 
         if (acceptInvalidValue === NO)
             return NO;
@@ -1127,6 +1153,12 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
     // Has to be enabled, and it also has to be editable or selectable.
     if (![self isEnabled] || !([self isEditable] || [self isSelectable]))
         return;
+
+    if ([self isEditable] && !_isEditing)
+    {
+        _isEditing = YES;
+        [self textDidBeginEditing:[CPNotification notificationWithName:CPControlTextDidBeginEditingNotification object:self userInfo:nil]];
+    }
 
     // CPTextField uses an HTML input element to take the input so we need to
     // propagate the dom event so the element is updated. This has to be done
@@ -1812,7 +1844,7 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
     [self _didEdit];
 }
 
-#pragma mark Setting the Delegate
+// MARK: Setting the Delegate
 
 - (void)setDelegate:(id <CPTextFieldDelegate>)aDelegate
 {
@@ -1972,6 +2004,43 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
         [self _setCSSStyleForInputElement];
 }
 
+// MARK: Overrides
+
+/*!
+    Sets the font of the receiver.
+
+    @param aFont - A CPFont object.
+*/
+- (void)setFont:(CPFont)aFont
+{
+    if ([self currentValueForThemeAttribute:@"font"] === aFont)
+        return;
+
+    // Apply the font to the default/normal state
+    [self setValue:aFont forThemeAttribute:@"font"];
+    
+    // Apply to standard editing and border states
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateEditing];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateBezeled];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateBordered];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPTextFieldStateRounded];
+    
+    // Use CPThemeState() function to create composite states instead of array literals
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeState(CPTextFieldStateRounded, CPThemeStateEditing)];
+    
+    // Apply across all standard control size states
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateControlSizeRegular];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateControlSizeSmall];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateControlSizeMini];
+
+    // Apply to table data view states (ensuring Interface Builder-style lists respect the font)
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeStateTableDataView];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeState(CPThemeStateTableDataView, CPThemeStateSelectedDataView)];
+    [self setValue:aFont forThemeAttribute:@"font" inState:CPThemeState(CPThemeStateTableDataView, CPThemeStateSelectedDataView, CPThemeStateFirstResponder, CPThemeStateKeyWindow)];
+
+    [self layoutSubviews];
+}
+
 - (void)takeValueFromKeyPath:(CPString)aKeyPath ofObjects:(CPArray)objects
 {
     var count = objects.length,
@@ -1988,7 +2057,7 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
         }
 }
 
-#pragma mark Overrides
+// MARK: Overrides
 
 /*!
     Sets the text color of the receiver.
@@ -2020,6 +2089,8 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
     }
 
     [self setValue:placeholderColor forThemeAttribute:@"text-color" inState:CPTextFieldStatePlaceholder];
+
+    [self layoutSubviews];
 }
 
 - (void)viewDidHide
@@ -2055,7 +2126,7 @@ CPTextFieldStatePlaceholder = CPThemeState("placeholder");
     return YES;
 }
 
-#pragma mark Private
+// MARK: Private
 
 - (BOOL)_isWithinUsablePlatformRect
 {
@@ -2390,7 +2461,7 @@ var CPTextFieldIsEditableKey            = "CPTextFieldIsEditableKey",
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPTextField (TableDataView)
 

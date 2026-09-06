@@ -1,14 +1,19 @@
-
 require("./common.jake");
 
-var FILE = require("file"),
-    SYSTEM = require("system"),
-    OS = require("os"),
-    UTIL = require("narwhal/util"),
-    jake = require("jake"),
-    stream = require("narwhal/term").stream;
+var fs = require('fs');
+var path = require('path');
+var childProcess = require("child_process");
+var os = require('os');
+
+const term = ObjectiveJ.term;
+const utilsFile = ObjectiveJ.utils.file;
 
 var subprojects = ["Objective-J", "CommonJS", "Foundation", "AppKit", "Tools"];
+
+task ("build", function() {
+    childProcess.execSync(["mkdir", "-p", $BUILD_DIR].map(utilsFile.enquote).join(" "), {stdio: 'inherit'});
+    childProcess.execSync(['ln', '-sf', '"$PWD"/node_modules', utilsFile.enquote($BUILD_DIR)].join(" "), {stdio: 'inherit'});
+});
 
 ["build", "clean", "clobber"].forEach(function(aTaskName)
 {
@@ -18,39 +23,54 @@ var subprojects = ["Objective-J", "CommonJS", "Foundation", "AppKit", "Tools"];
     });
 });
 
-$BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS = FILE.join($BUILD_CJS_OBJECTIVE_J, "Frameworks", "Debug");
-
+$BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS = path.join($BUILD_CJS_OBJECTIVE_J, "Frameworks", "Debug");
 
 filedir ($BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, ["debug", "release"], function()
 {
-    FILE.mkdirs($BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS);
+    fs.mkdirSync($BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, { recursive: true });
 
-    cp_r(FILE.join($BUILD_DIR, "Debug", "Objective-J"), FILE.join($BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, "Objective-J"));
+    utilsFile.cp_r(path.join($BUILD_DIR, "Debug", "Objective-J"), path.join($BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, "Objective-J"));
 });
 
-$BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS = FILE.join($BUILD_CJS_CAPPUCCINO, "Frameworks", "Debug");
+$BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS = path.join($BUILD_CJS_CAPPUCCINO, "Frameworks", "Debug");
 
 filedir ($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, ["debug", "release"], function()
 {
-    FILE.mkdirs($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS);
+    fs.mkdirSync($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, { recursive: true });
 
-    cp_r(FILE.join($BUILD_DIR, "Debug", "Foundation"), FILE.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "Foundation"));
-    cp_r(FILE.join($BUILD_DIR, "Debug", "AppKit"), FILE.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "AppKit"));
-    cp_r(FILE.join($BUILD_DIR, "Debug", "BlendKit"), FILE.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "BlendKit"));
+    utilsFile.cp_r(path.join($BUILD_DIR, "Debug", "Foundation"), path.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "Foundation"));
+    utilsFile.cp_r(path.join($BUILD_DIR, "Debug", "AppKit"), path.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "AppKit"));
+    utilsFile.cp_r(path.join($BUILD_DIR, "Debug", "BlendKit"), path.join($BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "BlendKit"));
 });
 
-task ("CommonJS", [$BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, $BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "debug", "release"]);
+task ("CommonJS", [$BUILD_CJS_OBJECTIVE_J_DEBUG_FRAMEWORKS, $BUILD_CJS_CAPPUCCINO_DEBUG_FRAMEWORKS, "debug", "release"], function() {
+});
 
-task ("install", ["CommonJS"], function()
+// Install everything in the dist directory
+task ("dist", ["CommonJS"], function()
 {
     installCopy($BUILD_CJS_OBJECTIVE_J, false);
     installCopy($BUILD_CJS_CAPPUCCINO, false);
 });
 
-task ("sudo-install", ["CommonJS"], function()
+task ("sudo-dist", ["CommonJS"], function()
 {
     installCopy($BUILD_CJS_OBJECTIVE_J, true);
     installCopy($BUILD_CJS_CAPPUCCINO, true);
+});
+
+// Install everything in the dist directory (task dist) and
+// create symlinks to the 'dist' binaries in the global 'npm prefix' path
+task ("install", ["dist"], function()
+{
+    installGlobal($BUILD_CJS_OBJECTIVE_J, false);
+    installGlobal($BUILD_CJS_CAPPUCCINO, false);
+});
+
+task ("sudo-install", ["sudo-dist"], function()
+{
+    installGlobal($BUILD_CJS_OBJECTIVE_J, true);
+    installGlobal($BUILD_CJS_CAPPUCCINO, true);
 });
 
 task ("install-symlinks", function()
@@ -67,35 +87,35 @@ task ("install-debug-symlinks", function()
 
 task ("clean-sprites", function()
 {
-    var f = new FileList(FILE.join(SYSTEM.env.CAPP_BUILD, "**/dataURLs.txt")),
+    var f = new FileList(path.join(SYSTEM.env.CAPP_BUILD, "**/dataURLs.txt")),
         paths = f.items();
 
-    f = new FileList(FILE.join(SYSTEM.env.CAPP_BUILD, "**/MHTML*.txt"));
+    f = new FileList(path.join(SYSTEM.env.CAPP_BUILD, "**/MHTML*.txt"));
     paths = paths.concat(f.items());
 
     paths.forEach(function(path)
     {
-        FILE.remove(path);
+        fs.rmSync(path);
     });
 });
 
 task ("clobber-theme", function()
 {
-    var f = new FileList(FILE.join(SYSTEM.env.CAPP_BUILD, "**/Aristo.blend"), FILE.join(SYSTEM.env.CAPP_BUILD, "**/Aristo2.blend")),
+    var f = new FileList(path.join(SYSTEM.env.CAPP_BUILD, "**/Aristo.blend"), path.join(SYSTEM.env.CAPP_BUILD, "**/Aristo2.blend")),
         paths = f.items();
 
-    f = new FileList(FILE.join(SYSTEM.env.CAPP_BUILD, "Aristo.build"), FILE.join(SYSTEM.env.CAPP_BUILD, "Aristo2.build"));
+    f = new FileList(path.join(SYSTEM.env.CAPP_BUILD, "Aristo.build"), path.join(SYSTEM.env.CAPP_BUILD, "Aristo2.build"));
     paths = paths.concat(f.items());
 
     paths.forEach(function(path)
     {
-        rm_rf(path);
+        utilsFile.rm_rf(path);
     });
 });
 
 // Documentation
 
-$DOCUMENTATION_BUILD = FILE.join($BUILD_DIR, "Documentation");
+$DOCUMENTATION_BUILD = path.join($BUILD_DIR, "Documentation");
 
 task ("docs", ["documentation"]);
 
@@ -112,94 +132,122 @@ task ("documentation-no-frame", function()
 });
 
 task ("docset", function()
-{
-    generateDocs(true);
-    var documentationDir = FILE.canonical(FILE.join("Tools", "Documentation")),
-        docsetShell = FILE.join(documentationDir, "support", "docset.sh");
-
-    OS.system([docsetShell, documentationDir]);
-});
-
-function generateDocs(/* boolean */ noFrame)
-{
-    // try to find a doxygen executable in the PATH;
-    var doxygen = executableExists("doxygen");
-
-    // If the Doxygen application is installed on Mac OS X, use that
-    if (!doxygen && executableExists("mdfind"))
-    {
-        try
-        {
-            var p = OS.popen(["mdfind", "kMDItemContentType == 'com.apple.application-bundle' && kMDItemCFBundleIdentifier == 'org.doxygen'"]);
-            if (p.wait() === 0)
-            {
-                var doxygenApps = p.stdout.read().split("\n");
-                if (doxygenApps[0])
-                    doxygen = FILE.join(doxygenApps[0], "Contents/Resources/doxygen");
-            }
-        }
-        finally
-        {
-            p.stdin.close();
-            p.stdout.close();
-            p.stderr.close();
-        }
+      {
+    // First, check if docsetutil is available. This is only required for this task.
+    if (!executableExists("docsetutil")) {
+        console.error("\nError: 'docsetutil' is not installed, but it's required to build the docset.".red);
+        console.log("This tool is no longer bundled with Xcode, but can be installed with Homebrew:");
+        console.log("\n    brew install swiftdocorg/formulae/docsetutil\n".yellow);
+        process.exit(1);
     }
 
-    if (!doxygen || !FILE.exists(doxygen))
-    {
-        colorPrint("Doxygen not installed, skipping documentation generation.", "yellow");
+    // If the tool exists, proceed with the build.
+    generateDocs(true, true);
+});
+
+function executableExists(command) {
+    try {
+        const checkCmd = process.platform === 'win32' ? 'where' : 'which';
+        childProcess.execSync(`${checkCmd} ${command}`, { stdio: 'pipe' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function generateDocs(/* boolean */ noFrame, /* boolean */ buildDocset = false)
+{
+    var doxygen = null;
+    if (executableExists("doxygen")) {
+        doxygen = "doxygen";
+    }
+
+    if (!doxygen) {
+        console.log("Doxygen not installed or not found, skipping documentation generation.");
         return;
     }
 
-    colorPrint("Using " + doxygen + " for doxygen binary.", "green");
-    colorPrint("Pre-processing source files...", "green");
+    // --- Temporary Directory Setup ---
+    const projectRoot = process.cwd();
+    const tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'capp-docs-')));
+    console.log(`Using temporary directory for build: ${tempDir}`);
 
-    var documentationDir = FILE.canonical(FILE.join("Tools", "Documentation")),
-        processors = FILE.glob(FILE.join(documentationDir, "preprocess/*"));
+    try {
+        var documentationDir = path.join(projectRoot, "Tools", "Documentation");
 
-    for (var i = 0; i < processors.length; ++i)
-        if (OS.system([processors[i], documentationDir]))
-            return;
+        // --- Pre-processing ---
+        console.log("Pre-processing source files...");
+        const preProcessorsDir = path.join(documentationDir, "preprocess");
+        var processors = fs.readdirSync(preProcessorsDir).sort();
 
-    if (noFrame)
-    {
-        // Back up the default settings, turn off the treeview
-        if (OS.system(["sed", "-i", ".bak", "s/GENERATE_TREEVIEW.*=.*YES/GENERATE_TREEVIEW = NO/", FILE.join(documentationDir, "Cappuccino.doxygen")]))
-            return;
-    }
-    else if (FILE.exists(FILE.join(documentationDir, "Cappuccino.doxygen.bak")))
-        mv(FILE.join(documentationDir, "Cappuccino.doxygen.bak"), FILE.join(documentationDir, "Cappuccino.doxygen"));
-
-    var doxygenDidSucceed = !OS.system([doxygen, FILE.join(documentationDir, "Cappuccino.doxygen")]);
-
-    // Restore the original doxygen settings
-    if (FILE.exists(FILE.join(documentationDir, "Cappuccino.doxygen.bak")))
-        mv(FILE.join(documentationDir, "Cappuccino.doxygen.bak"), FILE.join(documentationDir, "Cappuccino.doxygen"));
-
-    colorPrint("Post-processing generated documentation...", "green");
-
-    processors = FILE.glob(FILE.join(documentationDir, "postprocess/*"));
-
-    for (var i = 0; i < processors.length; ++i)
-        if (OS.system([processors[i], documentationDir, FILE.join("Documentation", "html")]))
-        {
-            rm_rf("Documentation");
-            return;
+        for (const processor of processors) {
+            const processorPath = path.join(preProcessorsDir, processor);
+            childProcess.execSync(`"${processorPath}" "${projectRoot}"`, { stdio: 'inherit', cwd: tempDir });
         }
 
-    if (doxygenDidSucceed)
-    {
-        if (!FILE.isDirectory($BUILD_DIR))
-            FILE.mkdirs($BUILD_DIR);
+        // --- Doxygen Execution ---
+        const doxygenConfigFile = path.join(documentationDir, "Cappuccino.doxygen");
+        const doxygenTempConfig = path.join(tempDir, "Cappuccino.doxygen");
+        fs.copyFileSync(doxygenConfigFile, doxygenTempConfig);
 
-        rm_rf($DOCUMENTATION_BUILD);
-        mv("debug.txt", FILE.join("Documentation", "debug.txt"));
-        mv("Documentation", $DOCUMENTATION_BUILD);
+        if (noFrame) {
+            console.log("Disabling treeview for no-frame documentation.");
+            childProcess.execSync(`sed -i.bak 's/GENERATE_TREEVIEW.*=.*YES/GENERATE_TREEVIEW = NO/' "${doxygenTempConfig}"`);
+        }
 
-        // There is a bug in doxygen 1.7.x preventing loading correctly the custom CSS
-        // So let's do it manually
-        cp(FILE.join(documentationDir, "doxygen.css"), FILE.join($DOCUMENTATION_BUILD, "html", "doxygen.css"));
+        console.log("Running Doxygen...");
+        childProcess.execSync(`"${doxygen}" "${doxygenTempConfig}"`, { stdio: 'inherit', cwd: tempDir });
+
+        const generatedDocsRoot = path.join(tempDir, "Documentation");
+        const htmlOutputDir = path.join(generatedDocsRoot, "html");
+        const makefilePath = path.join(htmlOutputDir, "Makefile");
+
+        // --- Makefile Execution (ONLY for docset) ---
+        // For a standard 'jake docs', we do NOT run make.
+        if (buildDocset && fs.existsSync(makefilePath)) {
+            console.log("Patching Makefile to use 'docsetutil' from PATH...");
+            childProcess.execSync(`sed -i.bak 's|"\\$(XCODE_INSTALL_DIR)"/usr/bin/docsetutil|docsetutil|' "${makefilePath}"`);
+
+            console.log("Building docset with 'make'...");
+            childProcess.execSync('make', { stdio: 'inherit', cwd: htmlOutputDir });
+        }
+
+        // --- Post-processing ---
+        console.log("Post-processing generated documentation...");
+        const postProcessorsDir = path.join(documentationDir, "postprocess");
+        processors = fs.readdirSync(postProcessorsDir).sort();
+
+        for (const processor of processors) {
+            const processorPath = path.join(postProcessorsDir, processor);
+            childProcess.execSync(`"${processorPath}" "${projectRoot}" "${htmlOutputDir}"`, { stdio: 'inherit', cwd: tempDir });
+        }
+
+        // --- Final Installation ---
+        if (fs.existsSync(generatedDocsRoot)) {
+            if (fs.existsSync($DOCUMENTATION_BUILD)) {
+                fs.rmSync($DOCUMENTATION_BUILD, { recursive: true, force: true });
+            }
+            fs.renameSync(generatedDocsRoot, $DOCUMENTATION_BUILD);
+
+            // Manually copy the custom CSS file
+            const finalHtmlPath = path.join($DOCUMENTATION_BUILD, "html");
+            const customCSS = path.join(documentationDir, "doxygen.css");
+            if (fs.existsSync(customCSS)) {
+                console.log("Applying custom stylesheet...");
+                fs.copyFileSync(customCSS, path.join(finalHtmlPath, "doxygen.css"));
+            }
+
+            console.log("Documentation successfully built in " + finalHtmlPath);
+        } else {
+            console.error("Doxygen or post-processing failed to produce the 'Documentation' directory.");
+        }
+    } catch (e) {
+        console.error("An error occurred during documentation generation:", e.message);
+        process.exit(1);
+    } finally {
+        // --- Cleanup ---
+        console.log(`Cleaning up temporary directory: ${tempDir}`);
+        fs.rmSync(tempDir, { recursive: true, force: true });
     }
 }
 
@@ -207,25 +255,25 @@ function generateDocs(/* boolean */ noFrame)
 
 task ("downloads", ["starter_download"]);
 
-$STARTER_README                 = FILE.join('Tools', 'READMEs', 'STARTER-README');
+$STARTER_README                 = path.join('Tools', 'READMEs', 'STARTER-README');
 $STARTER_BOOTSTRAP              = 'bootstrap.sh';
-$STARTER_DOWNLOAD               = FILE.join($BUILD_DIR, 'Cappuccino', 'Starter');
-$STARTER_DOWNLOAD_APPLICATION   = FILE.join($STARTER_DOWNLOAD, 'NewApplication');
-$STARTER_DOWNLOAD_README        = FILE.join($STARTER_DOWNLOAD, 'README');
-$STARTER_DOWNLOAD_BOOTSTRAP     = FILE.join($STARTER_DOWNLOAD, 'bootstrap.sh');
+$STARTER_DOWNLOAD               = path.join($BUILD_DIR, 'Cappuccino', 'Starter');
+$STARTER_DOWNLOAD_APPLICATION   = path.join($STARTER_DOWNLOAD, 'NewApplication');
+$STARTER_DOWNLOAD_README        = path.join($STARTER_DOWNLOAD, 'README');
+$STARTER_DOWNLOAD_BOOTSTRAP     = path.join($STARTER_DOWNLOAD, 'bootstrap.sh');
 
 task ("starter_download", [$STARTER_DOWNLOAD_APPLICATION, $STARTER_DOWNLOAD_README, $STARTER_DOWNLOAD_BOOTSTRAP, "documentation"], function()
 {
     if (FILE.exists($DOCUMENTATION_BUILD))
     {
-        rm_rf(FILE.join($STARTER_DOWNLOAD, 'Documentation'));
-        cp_r(FILE.join($DOCUMENTATION_BUILD, 'html', '.'), FILE.join($STARTER_DOWNLOAD, 'Documentation'));
+        utilsFile.rm_rf(path.join($STARTER_DOWNLOAD, 'Documentation'));
+        utilsFile.cp_r(path.join($DOCUMENTATION_BUILD, 'html', '.'), path.join($STARTER_DOWNLOAD, 'Documentation'));
     }
 });
 
 filedir ($STARTER_DOWNLOAD_APPLICATION, ["CommonJS"], function()
 {
-    rm_rf($STARTER_DOWNLOAD_APPLICATION);
+    utilsFile.rm_rf($STARTER_DOWNLOAD_APPLICATION);
     FILE.mkdirs($STARTER_DOWNLOAD);
 
     if (OS.system(["capp", "gen", $STARTER_DOWNLOAD_APPLICATION, "-t", "Application", "--noconfig"]))
@@ -238,7 +286,7 @@ filedir ($STARTER_DOWNLOAD_APPLICATION, ["CommonJS"], function()
 
 filedir ($STARTER_DOWNLOAD_README, [$STARTER_README], function()
 {
-    cp($STARTER_README, $STARTER_DOWNLOAD_README);
+    utilsFile.cp($STARTER_README, $STARTER_DOWNLOAD_README);
 });
 
 filedir ($STARTER_DOWNLOAD_BOOTSTRAP, [$STARTER_BOOTSTRAP], function()
@@ -252,23 +300,23 @@ filedir ($STARTER_DOWNLOAD_BOOTSTRAP, [$STARTER_BOOTSTRAP], function()
 
 task ("deploy", ["downloads", "demos"], function()
 {
-    var cappuccino_output_path = FILE.join($BUILD_DIR, 'Cappuccino');
+    var cappuccino_output_path = path.join($BUILD_DIR, 'Cappuccino');
 
     // zip the starter pack
-    var starter_zip_output = FILE.join($BUILD_DIR, 'Cappuccino', 'Starter.zip');
-    rm_rf(starter_zip_output);
+    var starter_zip_output = path.join($BUILD_DIR, 'Cappuccino', 'Starter.zip');
+    utilsFile.rm_rf(starter_zip_output);
 
     OS.system("cd " + OS.enquote(cappuccino_output_path) + " && zip -ry -8 Starter.zip Starter");
 });
 
 task ("demos", function()
 {
-    var demosDir = FILE.join($BUILD_DIR, "CappuccinoDemos"),
-        zipDir = FILE.join(demosDir, "demos.zip"),
+    var demosDir = path.join($BUILD_DIR, "CappuccinoDemos"),
+        zipDir = path.join(demosDir, "demos.zip"),
         demosQuoted = OS.enquote(demosDir),
         zipQuoted = OS.enquote(zipDir);
 
-    rm_rf(demosDir);
+    utilsFile.rm_rf(demosDir);
     FILE.mkdirs(demosDir);
 
     OS.system("curl -L http://github.com/cappuccino/cappuccino-demos/zipball/master > " + zipQuoted);
@@ -279,7 +327,7 @@ task ("demos", function()
     function Demo(aPath)
     {
         this._path = aPath;
-        this._plist = CFPropertyList.readPropertyListFromFile(FILE.join(aPath, 'Info.plist'));
+        this._plist = CFPropertyList.readPropertyListFromFile(path.join(aPath, 'Info.plist'));
     }
 
     Demo.prototype.plist = function(key)
@@ -309,21 +357,21 @@ task ("demos", function()
         return this.name();
     };
 
-    FILE.glob(FILE.join(demosDir, "demos", "**/Info.plist")).map(function(demoPath){
+    FILE.glob(path.join(demosDir, "demos", "**/Info.plist")).map(function(demoPath){
         return new Demo(FILE.dirname(demoPath));
     }).filter(function(demo){
         return !demo.excluded();
     }).forEach(function(demo)
     {
         // copy frameworks into the demos
-        cp_r(FILE.join($STARTER_DOWNLOAD_APPLICATION, "Frameworks"), FILE.join(demo.path(), "Frameworks"));
-        rm_rf(FILE.join(demo.path(), "Frameworks", "Debug"));
+        utilsFile.cp_r(path.join($STARTER_DOWNLOAD_APPLICATION, "Frameworks"), path.join(demo.path(), "Frameworks"));
+        utilsFile.rm_rf(path.join(demo.path(), "Frameworks", "Debug"));
 
         var outputPath = demo.name().replace(/\s/g, "-") + ".zip";
         OS.system("cd " + OS.enquote(FILE.dirname(demo.path()))+" && zip -ry -8 " + OS.enquote(outputPath) + " " + OS.enquote(FILE.basename(demo.path())));
 
         // remove the frameworks
-        rm_rf(FILE.join(demo.path(), "Frameworks"));
+        utilsFile.rm_rf(path.join(demo.path(), "Frameworks"));
     });
 });
 
@@ -333,12 +381,18 @@ task("test", ["CommonJS", "test-only"]);
 
 task("test-only", function()
 {
-    var tests = new FileList('Tests/**/*Test.j'),
-        cmd = ["ojtest"].concat(tests.items()),
-        code = OS.system(serializedENV() + " " + cmd.map(OS.enquote).join(" "));
+    var tests = new FileList('Tests/**/*Test.j');
+    var cmd = ["ojtest"].concat(tests.items());
+    var cmdString = cmd.map(utilsFile.enquote).join(" ");
 
-    if (code !== 0)
-        OS.exit(code);
+    try
+    {
+        childProcess.execSync(serializedENV() + " " + cmdString, {stdio: 'inherit'});
+    }
+    catch (e)
+    {
+        process.exit(1);
+    }
 });
 
 task("check-missing-imports", function()
@@ -401,9 +455,9 @@ function pushPackage(path, remote, branch)
 
     var pkg = JSON.parse(packagePath.join("package.json").read({ charset : "UTF-8" }));
 
-    stream.print("    Version:   " + colorize(pkg.version, "purple"));
-    stream.print("    Revision:  " + colorize(pkg["cappuccino-revision"], "purple"));
-    stream.print("    Timestamp: " + colorize(pkg["cappuccino-timestamp"], "purple"));
+    term.stream.print("    Version:   " + colorize(pkg.version, "purple"));
+    term.stream.print("    Revision:  " + colorize(pkg["cappuccino-revision"], "purple"));
+    term.stream.print("    Timestamp: " + colorize(pkg["cappuccino-timestamp"], "purple"));
 
     var cmd = [
         ["cd", packagePath],

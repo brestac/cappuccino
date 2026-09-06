@@ -136,8 +136,8 @@ var CPAutosavedRecentsChangedNotification = @"CPAutosavedRecentsChangedNotificat
 }
 
 
-#pragma mark -
-#pragma mark Override observers
+// MARK: -
+// MARK: Override observers
 
 - (void)_removeObservers
 {
@@ -827,9 +827,10 @@ var CPAutosavedRecentsChangedNotification = @"CPAutosavedRecentsChangedNotificat
 
         [bezelView setBackgroundColor:bezelColor];
 
-        _contentView = [self layoutEphemeralSubviewNamed:@"content-view"
-                                              positioned:CPWindowAbove
-                         relativeToEphemeralSubviewNamed:@"bezel-view"];
+        if (!_contentView)
+            _contentView = [self layoutEphemeralSubviewNamed:@"content-view"
+                                                  positioned:CPWindowAbove
+                             relativeToEphemeralSubviewNamed:@"bezel-view"];
     }
 
     if (_contentView)
@@ -979,7 +980,7 @@ var CPAutosavedRecentsChangedNotification = @"CPAutosavedRecentsChangedNotificat
 
 @end
 
-#pragma mark -
+// MARK: -
 
 @implementation CPSearchField (CPTrackingArea)
 {
@@ -1034,7 +1035,7 @@ var CPAutosavedRecentsChangedNotification = @"CPAutosavedRecentsChangedNotificat
 
 @end
 
-#pragma mark -
+// MARK: -
 
 var CPRecentsAutosaveNameKey            = @"CPRecentsAutosaveNameKey",
     CPSendsWholeSearchStringKey         = @"CPSendsWholeSearchStringKey",

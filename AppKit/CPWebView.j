@@ -39,6 +39,8 @@ CPWebViewProgressEstimateChangedNotification    = "CPWebViewProgressEstimateChan
 CPWebViewProgressStartedNotification            = "CPWebViewProgressStartedNotification";
 CPWebViewProgressFinishedNotification           = "CPWebViewProgressFinishedNotification";
 
+@global document
+
 /*!
     Automatically choose between AppKit (Cappuccino style) scrollbars and
     native scrollbars. In this mode AppKit scrollbars are always used except
@@ -276,7 +278,11 @@ CPWebViewAppKitScrollMaxPollCount                  = 3;
 
     if (_effectiveScrollMode === CPWebViewScrollAppKit)
     {
-        var visibleRect = [_frameView visibleRect];
+        // Use `[_scrollView documentVisibleRect]` instead of `[_frameView visibleRect]`.
+        // `visibleRect` accounts for window clipping, which collapses to 0x0 if the view is 
+        // animated off-screen, resulting in an incorrectly shrunken web layout.
+        var visibleRect = [_scrollView documentVisibleRect];
+        
         [_frameView setFrameSize:CGSizeMake(CGRectGetMaxX(visibleRect), CGRectGetMaxY(visibleRect))];
 
         // try to get the document size so we can correctly set the frame

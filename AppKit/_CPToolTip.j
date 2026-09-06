@@ -45,8 +45,8 @@ var _CPToolTipHeight = 24.0,
 }
 
 
-#pragma mark -
-#pragma mark Class Methods
+// MARK: -
+// MARK: Class Methods
 
 /*! @ignore
     Invalidate any scheduled tooltips, or hide any visible one
@@ -118,6 +118,12 @@ var _CPToolTipHeight = 24.0,
         textFrameSizeSingleLine = [aText sizeWithFont:font],
         textFrameSize = [aText sizeWithFont:font inWidth:(aToolTipSize.width)];
 
+    // this small adjustement fixes
+    // tooltips wrapping issues from fractional pixels.
+    textFrameSizeSingleLine.width += 1;
+    textFrameSize.width += 1;
+
+
     // If the text fully fits within the maximum width, shrink to fit.
     if (textFrameSizeSingleLine.width < aToolTipSize.width)
     {
@@ -154,8 +160,8 @@ var _CPToolTipHeight = 24.0,
 }
 
 
-#pragma mark -
-#pragma mark Initialization
+// MARK: -
+// MARK: Initialization
 
 /*!
     Returns an initialized _CPToolTip with string.
@@ -202,8 +208,8 @@ var _CPToolTipHeight = 24.0,
 }
 
 
-#pragma mark -
-#pragma mark Controls
+// MARK: -
+// MARK: Controls
 
 /*!
     Show the tooltip after computing the position.

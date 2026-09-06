@@ -32,6 +32,7 @@
 
 @end
 
+@global document
 
 var CPSoundDelegate_sound_didFinishPlaying_ = 1 << 1;
 
@@ -65,8 +66,8 @@ CPSoundPlayBackStatePause   = 2;
     unsigned            _implementedDelegateMethods;
 }
 
-#pragma mark -
-#pragma mark Initialization
+// MARK: -
+// MARK: Initialization
 
 - (id)init
 {
@@ -146,8 +147,8 @@ CPSoundPlayBackStatePause   = 2;
 }
 
 
-#pragma mark -
-#pragma mark Delegate methods
+// MARK: -
+// MARK: Delegate methods
 
 /*!
     Sets the sound's delegate.
@@ -165,8 +166,8 @@ CPSoundPlayBackStatePause   = 2;
         _implementedDelegateMethods |= CPSoundDelegate_sound_didFinishPlaying_;
 }
 
-#pragma mark -
-#pragma mark Events listener
+// MARK: -
+// MARK: Events listener
 
 /*! @ignore
 */
@@ -198,8 +199,8 @@ CPSoundPlayBackStatePause   = 2;
 }
 
 
-#pragma mark -
-#pragma mark Media controls
+// MARK: -
+// MARK: Media controls
 
 /*!
     Play the sound.
@@ -323,8 +324,8 @@ CPSoundPlayBackStatePause   = 2;
     _audioTag.volume = aVolume;
 }
 
-#pragma mark -
-#pragma mark Accessors
+// MARK: -
+// MARK: Accessors
 
 /*!
     Returns the duration in seconds of the sound.

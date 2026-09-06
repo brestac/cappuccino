@@ -31,6 +31,7 @@
 @import "CPTextStorage.j"
 @import "CPTextContainer.j"
 @import "CPLayoutManager.j"
+@import "CPParagraphStyle.j"
 
 @import "_CPRTFParser.j"
 @import "_CPRTFProducer.j"
@@ -55,6 +56,8 @@
 
 @end
 
+@global document
+
 _MakeRangeFromAbs = function(a1, a2)
 {
     return (a1 < a2) ? CPMakeRange(a1, a2 - a1) : CPMakeRange(a2, a1 - a2);
@@ -67,7 +70,7 @@ _MidRange = function(a1)
 
 function _isWhitespaceCharacter(chr)
 {
-    return (chr === '\n' || chr === '\r' || chr === ' ' || chr === '\t');
+    return (chr === '\n' || chr === '\r' || chr === ' '); //  || chr === '\t'
 }
 
 _characterTripletFromStringAtIndex = function(string, index)
@@ -114,6 +117,7 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 /*!
     @ingroup appkit
     @class CPTextView
+    Copy / Paste is only fully supported with a CPMenu (can be hidden)
 */
 @implementation CPTextView : CPText
 {
@@ -187,8 +191,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
     return editMenu;
 }
 
-#pragma mark -
-#pragma mark Class methods
+// MARK: -
+// MARK: Class methods
 
 /* <!> FIXME
     just a testing characterSet
@@ -196,8 +200,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
     Need some CPLocale support and maybe even a FSM...
  */
 
-#pragma mark -
-#pragma mark Init methods
+// MARK: -
+// MARK: Init methods
 
 - (id)initWithFrame:(CGRect)aFrame textContainer:(CPTextContainer)aContainer
 {
@@ -397,6 +401,7 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 - (void)superviewFrameChanged:(CPNotification)aNotification
 {
     _exposedRect = nil;
+    [self sizeToFit];
 }
 
 - (void)viewWillMoveToSuperview:(CPView)aView
@@ -439,32 +444,41 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
         [self _becomeFirstResponder];
 }
 
-#pragma mark -
-#pragma mark Copy and paste methods
+// MARK: -
+// MARK: Copy and paste methods
 
 - (void)copy:(id)sender
 {
     [super copy:sender];
-
-    if (![self isRichText])
-        return;
 
     var selectedRange = [self selectedRange],
         pasteboard = [CPPasteboard generalPasteboard],
         stringForPasting = [[self textStorage] attributedSubstringFromRange:CPMakeRangeCopy(selectedRange)],
         richData = [_CPRTFProducer produceRTF:stringForPasting documentAttributes:@{}];
 
+    if ([self isRichText])
+    {
         [pasteboard declareTypes:[CPStringPboardType, CPRTFPboardType, _CPSmartPboardType, _CPASPboardType] owner:nil];
         [pasteboard setString:[stringForPasting._string stringByReplacingOccurrencesOfString:_CPAttachmentCharacterAsString withString:''] forType:CPStringPboardType];
         [pasteboard setString:richData forType:CPRTFPboardType];
         [pasteboard setString:_previousSelectionGranularity + '' forType:_CPSmartPboardType];
         [pasteboard setString:[[CPKeyedArchiver archivedDataWithRootObject:stringForPasting] rawString] forType:_CPASPboardType];
+    }
+    else
+    {
+        [pasteboard declareTypes:[CPStringPboardType, _CPSmartPboardType] owner:nil];
+        [pasteboard setString:stringForPasting._string forType:CPStringPboardType];
+        [pasteboard setString:_previousSelectionGranularity + '' forType:_CPSmartPboardType];
+    }
 }
 
 - (void)_pasteString:(id)stringForPasting
 {
     if (!stringForPasting)
         return;
+
+    if (![stringForPasting isKindOfClass:[CPAttributedString class]])
+        stringForPasting = [[CPAttributedString alloc] initWithString:stringForPasting attributes:nil];
 
     var shouldUseSmartPasting = [self _shouldUseSmartPasting];
 
@@ -507,28 +521,36 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 
 - (void)paste:(id)sender
 {
-    if (![sender isKindOfClass:_CPNativeInputManager] && [[CPApp currentEvent] type] != CPAppKitDefined)
-        return
+    if ([[CPApp currentEvent] type] != CPAppKitDefined)
+        return;
 
     [self _pasteString:[self _stringForPasting]];
 }
 
-#pragma mark -
-#pragma mark Responders method
+// MARK: -
+// MARK: Responders method
 
 - (BOOL)acceptsFirstResponder
 {
     return [self isSelectable]; // editable textviews are automatically selectable
 }
 
+- (BOOL)acceptsFirstMouse:(CPEvent)anEvent
+{
+    return YES;
+}
+
 - (void)_becomeFirstResponder
 {
     [self updateInsertionPointStateAndRestartTimer:YES];
+    
+    // SYNCHRONIZE ACTIVE PARAGRAPH MARKERS ON EDITOR FOCUS
+    [self updateRuler];
+    
     [[CPFontManager sharedFontManager] setSelectedFont:[self font] isMultiple:NO];
     [self setNeedsDisplay:YES];
     [[CPRunLoop currentRunLoop] performSelector:@selector(focusForTextView:) target:[_CPNativeInputManager class] argument:self order:0 modes:[CPDefaultRunLoopMode]];
 }
-
 
 - (BOOL)becomeFirstResponder
 {
@@ -565,8 +587,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Delegate methods
+// MARK: -
+// MARK: Delegate methods
 
 /*!
     TODO : documentation
@@ -625,8 +647,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Key window methods
+// MARK: -
+// MARK: Key window methods
 
 - (void)becomeKeyWindow
 {
@@ -652,8 +674,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Undo redo methods
+// MARK: -
+// MARK: Undo redo methods
 
 - (void)undo:(id)sender
 {
@@ -668,8 +690,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Accessors
+// MARK: -
+// MARK: Accessors
 
 - (CPString)stringValue
 {
@@ -783,8 +805,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Insert characters methods
+// MARK: -
+// MARK: Insert characters methods
 
 - (void)_fixupReplaceForRange:(CPRange)aRange
 {
@@ -842,8 +864,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
     _stickyXLocation = MAX(0, _caret._rect.origin.x - 1);
 }
 
-#pragma mark -
-#pragma mark Drawing methods
+// MARK: -
+// MARK: Drawing methods
 
 - (void)drawInsertionPointInRect:(CGRect)aRect color:(CPColor)aColor turnedOn:(BOOL)flag
 {
@@ -901,8 +923,8 @@ var kDelegateRespondsTo_textShouldBeginEditing                                  
 }
 
 
-#pragma mark -
-#pragma mark Select methods
+// MARK: -
+// MARK: Select methods
 
 - (void)selectAll:(id)sender
 {
@@ -983,6 +1005,25 @@ Sets the selection to a range of characters in response to user action.
         if (doOverwrite && _placeholderString == nil && isNewSelection)
             [self setTypingAttributes:[_textStorage attributesAtIndex:CPMaxRange(range) effectiveRange:nil]];
 
+        // Update the shared CPColorPanel with the active selection color
+        if ([self _isFirstResponder] && [_textStorage length] > 0)
+        {
+            var currentTextColor = [self textColor] || [CPColor blackColor];
+
+            if ([self isRichText])
+            {
+                var charIndex = _selectionRange.location;
+                if (charIndex >= [_textStorage length])
+                    charIndex = MAX(0, charIndex - 1);
+
+                var attributes = [_textStorage attributesAtIndex:charIndex effectiveRange:nil];
+                if ([attributes objectForKey:CPForegroundColorAttributeName])
+                    currentTextColor = [attributes objectForKey:CPForegroundColorAttributeName];
+            }
+
+            [[CPColorPanel sharedColorPanel] setColor:currentTextColor];
+        }
+
         [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeSelectionNotification object:self];
     }
 
@@ -1009,50 +1050,28 @@ Sets the selection to a range of characters in response to user action.
 }
 #endif
 
-
-// interface to the _CPNativeInputManager
-- (void)_activateNativeInputElement:(DOMElement)aNativeField
-{
-    var attributes = [[self typingAttributes] copy];
-
-    // make it invisible
-    [attributes setObject:[CPColor colorWithRed:1 green:1 blue:1 alpha:0] forKey:CPForegroundColorAttributeName];
-
-    // FIXME: this hack to provide the visual space for the inputmanager should at least bypass the undomanager
-    var placeholderString = [[CPAttributedString alloc] initWithString:aNativeField.innerHTML attributes:attributes];
-    [self insertText:placeholderString];
-
-    var caretOrigin = [_layoutManager boundingRectForGlyphRange:CPMakeRange(MAX(0, _selectionRange.location - 1), 1) inTextContainer:_textContainer].origin;
-    caretOrigin.y += [_layoutManager _characterOffsetAtLocation:MAX(0, _selectionRange.location - 1)];
-    caretOrigin.x += 2; // two pixel offset to the LHS character
-    var cumulativeOffset = [self _cumulativeOffset];
-
-
-#if PLATFORM(DOM)
-    aNativeField.style.left = (caretOrigin.x + cumulativeOffset.x) + "px";
-    aNativeField.style.top = (caretOrigin.y + cumulativeOffset.y) + "px";
-    aNativeField.style.font = [[_typingAttributes objectForKey:CPFontAttributeName] cssString];
-    aNativeField.style.color = [[_typingAttributes objectForKey:CPForegroundColorAttributeName] cssString];
-#endif
-
-    [_caret setVisibility:NO];  // hide our caret because now the system caret takes over
-}
-
 - (CPArray)selectedRanges
 {
     return [_selectionRange];
 }
 
-#pragma mark -
-#pragma mark Keyboard events
+// MARK: -
+// MARK: Keyboard events
 
 - (void)keyDown:(CPEvent)event
 {
+    [[_window platformWindow] _propagateCurrentDOMEvent:YES];
 
-    [[_window platformWindow] _propagateCurrentDOMEvent:YES];  // for the _CPNativeInputManager (necessary at least on FF and chrome)
-
-    if (![_CPNativeInputManager isNativeInputFieldActive] && [event charactersIgnoringModifiers].charCodeAt(0) != 229) // filter out 229 because this would be inserted in chrome on each deadkey
+    if ([event _isActionOrCommandEvent])
+    {
+        // This is a navigation key, action key, or command shortcut.
+        // Let the Cappuccino framework's key binding system handle it.
         [self interpretKeyEvents:[event]];
+    }
+
+    // This is a normal printable character ('a', '1', '$', 'é').
+    // We do nothing, preventing the double-insertion bug. The _CPNativeInputManager
+    // will capture it from the hidden input field and insert it correctly.
 
     [_caret setPermanentlyVisible:YES];
 }
@@ -1105,13 +1124,16 @@ Sets the selection to a range of characters in response to user action.
     [placeholderString addAttribute:_CPAttachmentInvisible value:YES range:rangeToHide];
 }
 
-#pragma mark -
-#pragma mark Mouse Events
+// MARK: -
+// MARK: Mouse Events
 
 - (void)mouseDown:(CPEvent)event
 {
     if (![self isSelectable])
         return;
+
+    // this is for the ipad-keyboard
+    [_CPNativeInputManager focusForClipboardOfTextView:self];
 
     [_CPNativeInputManager cancelCurrentInputSessionIfNeeded];
     [_caret setVisibility:NO];
@@ -1395,7 +1417,10 @@ Sets the selection to a range of characters in response to user action.
 - (void)moveLeftAndModifySelection:(id)sender
 {
     if ([self isSelectable])
+    {
        [self _extendSelectionIntoDirection:-1 granularity:CPSelectByCharacter];
+       [self scrollRangeToVisible:_selectionRange];
+    }
 }
 
 - (void)moveBackward:(id)sender
@@ -1417,7 +1442,10 @@ Sets the selection to a range of characters in response to user action.
 - (void)moveLeft:(id)sender
 {
     if ([self isSelectable])
+    {
         [self _establishSelection:CPMakeRange(_selectionRange.location - (_selectionRange.length ? 0 : 1), 0) byExtending:NO];
+        [self scrollRangeToVisible:_selectionRange];
+    }
 }
 
 - (void)moveToEndOfParagraph:(id)sender
@@ -1651,7 +1679,10 @@ Sets the selection to a range of characters in response to user action.
 - (void)moveRight:(id)sender
 {
     if ([self isSelectable])
+    {
         [self _establishSelection:CPMakeRange(CPMaxRange(_selectionRange) + (_selectionRange.length ? 0 : 1), 0) byExtending:NO];
+        [self scrollRangeToVisible:_selectionRange];
+    }
 }
 
 - (void)_deleteForRange:(CPRange)changedRange
@@ -1720,6 +1751,9 @@ Sets the selection to a range of characters in response to user action.
 
 - (void)cut:(id)sender
 {
+    if ([[CPApp currentEvent] type] != CPAppKitDefined)
+        return;
+
     var selectedRange = [self selectedRange];
 
     if (selectedRange.length < 1)
@@ -1781,6 +1815,16 @@ Sets the selection to a range of characters in response to user action.
         [self _enrichEssentialTypingAttributes:_typingAttributes];
     }
 
+    // SYNCHRONIZE ACTIVE PARAGRAPH MARKERS ON TYPING ATTRIBUTES CHANGE
+    [self updateRuler];
+
+    // Synchronize CPColorPanel if text view is active
+    if ([self _isFirstResponder])
+    {
+        var currentTextColor = [_typingAttributes objectForKey:CPForegroundColorAttributeName] || [self textColor] || [CPColor blackColor];
+        [[CPColorPanel sharedColorPanel] setColor:currentTextColor];
+    }
+
     [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeTypingAttributesNotification object:self];
 
     // We always clear the saved selection range from the last mouse down event here.
@@ -1803,8 +1847,8 @@ Sets the selection to a range of characters in response to user action.
 }
 
 
-#pragma mark -
-#pragma mark Font methods
+// MARK: -
+// MARK: Font methods
 
 - (CPFont)font
 {
@@ -1869,7 +1913,11 @@ Sets the selection to a range of characters in response to user action.
         }
         else
         {
-            [_typingAttributes setObject:[sender selectedFont] forKey:CPFontAttributeName];
+            attributes = [_textStorage attributesAtIndex:_selectionRange.location
+                                       longestEffectiveRange:_selectionRange
+                                                     inRange:_selectionRange];
+            oldFont = [attributes objectForKey:CPFontAttributeName] || [self font];
+            [_typingAttributes setObject:[sender convertFont:oldFont] forKey:CPFontAttributeName];
         }
     }
     else
@@ -1890,8 +1938,8 @@ Sets the selection to a range of characters in response to user action.
 }
 
 
-#pragma mark -
-#pragma mark Color methods
+// MARK: -
+// MARK: Color methods
 
 - (void)changeColor:(id)sender
 {
@@ -1924,6 +1972,87 @@ Sets the selection to a range of characters in response to user action.
         [_typingAttributes setObject:aColor forKey:CPForegroundColorAttributeName];
 
     [_layoutManager textStorage:_textStorage edited:0 range:CPMakeRangeCopy(range) changeInLength:0 invalidatedRange:CPMakeRangeCopy(range)];
+}
+
+// MARK: -
+// MARK: Style & Alignment methods
+
+- (void)bold:(id)sender
+{
+    // This will trigger changeFont: via the FontManager
+    [[CPFontManager sharedFontManager] addFontTrait:CPBoldFontMask];
+}
+
+- (void)italic:(id)sender
+{
+    // This will trigger changeFont: via the FontManager
+    [[CPFontManager sharedFontManager] addFontTrait:CPItalicFontMask];
+}
+
+- (void)alignLeft:(id)sender
+{
+    [self _setAlignment:CPLeftTextAlignment];
+}
+
+- (void)alignCenter:(id)sender
+{
+    [self _setAlignment:CPCenterTextAlignment];
+}
+
+- (void)alignRight:(id)sender
+{
+    [self _setAlignment:CPRightTextAlignment];
+}
+
+- (void)alignJustified:(id)sender
+{
+    [self _setAlignment:CPJustifiedTextAlignment];
+}
+
+- (void)_setAlignment:(CPTextAlignment)anAlignment
+{
+    if (![self _didBeginEditing] || ![self shouldChangeTextInRange:_selectionRange replacementString:nil])
+        return;
+
+    var style = [CPParagraphStyle defaultParagraphStyle],
+        currentAttributes = _typingAttributes;
+
+    // Attempt to grab existing style from selection to preserve other paragraph settings
+    if (_selectionRange.length > 0)
+        currentAttributes = [_textStorage attributesAtIndex:_selectionRange.location effectiveRange:nil];
+    
+    if ([currentAttributes objectForKey:CPParagraphStyleAttributeName])
+        style = [currentAttributes objectForKey:CPParagraphStyleAttributeName];
+
+    // Create new style with modified alignment
+    var newStyle = [style mutableCopy];
+    [newStyle setAlignment:anAlignment];
+
+    if (_selectionRange.length > 0)
+    {
+        // Add rudimentary undo support
+        var undoManager = [[self window] undoManager];
+        if (undoManager)
+        {
+             [[undoManager prepareWithInvocationTarget:self]
+                 _setAlignment:[style alignment]];
+        }
+
+        [_textStorage addAttribute:CPParagraphStyleAttributeName value:newStyle range:CPMakeRangeCopy(_selectionRange)];
+        
+        // Notify layout manager of changes
+        [_layoutManager textStorage:_textStorage 
+                             edited:0 
+                              range:CPMakeRangeCopy(_selectionRange) 
+                     changeInLength:0 
+                   invalidatedRange:CPMakeRangeCopy(_selectionRange)];
+    }
+    else
+    {
+        // Update typing attributes for next character
+        [_typingAttributes setObject:newStyle forKey:CPParagraphStyleAttributeName];
+        [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeTypingAttributesNotification object:self];
+    }
 }
 
 - (void)underline:(id)sender
@@ -1976,45 +2105,55 @@ Sets the selection to a range of characters in response to user action.
     [self setFrameSize:[self frameSize]];
 }
 
+- (void)setBoundsSize:(CGSize)aSize
+{
+    _exposedRect = nil; // Clear the cached visible rect when bounds change
+    [super setBoundsSize:aSize];
+}
+
 - (void)setFrameSize:(CGSize)aSize
 {
-    var minSize = [self minSize],
-        maxSize = [self maxSize],
-        desiredSize = CGSizeCreateCopy(aSize),
-        rect = CGRectUnion([_layoutManager boundingRectForGlyphRange:CPMakeRange(0, 1) inTextContainer:_textContainer],
-                           [_layoutManager boundingRectForGlyphRange:CPMakeRange(MAX(0, [_layoutManager numberOfCharacters] - 2), 1) inTextContainer:_textContainer]),
-        myClipviewSize = nil;
+    _exposedRect = nil; // Clear the cached visible rect so it gets recalculated at the new size
+
+    var desiredSize = CGSizeCreateCopy(aSize);
+
+    if (_isHorizontallyResizable || _isVerticallyResizable)
+    {
+        var minSize = [self minSize],
+            maxSize = [self maxSize],
+            rect = CGRectUnion([_layoutManager boundingRectForGlyphRange:CPMakeRange(0, 1) inTextContainer:_textContainer],
+                           [_layoutManager boundingRectForGlyphRange:CPMakeRange(MAX(0, [_layoutManager numberOfCharacters] - 2), 1) inTextContainer:_textContainer]);
+
+        if ([_layoutManager extraLineFragmentTextContainer] === _textContainer)
+            rect = CGRectUnion(rect, [_layoutManager extraLineFragmentRect]);
+
+        if (_isHorizontallyResizable)
+        {
+            rect = [_layoutManager boundingRectForGlyphRange:CPMakeRange(0, MAX(0, [_layoutManager numberOfCharacters] - 1)) inTextContainer:_textContainer]; // needs expensive "deep" recalculation
+
+            desiredSize.width = rect.size.width + 2 * _textContainerInset.width;
+
+            if (desiredSize.width < minSize.width)
+                desiredSize.width = minSize.width;
+            else if (desiredSize.width > maxSize.width)
+                desiredSize.width = maxSize.width;
+        }
+
+        if (_isVerticallyResizable)
+        {
+            desiredSize.height = rect.size.height + 2 * _textContainerInset.height;
+
+            if (desiredSize.height < minSize.height)
+                desiredSize.height = minSize.height;
+            else if (desiredSize.height > maxSize.height)
+                desiredSize.height = maxSize.height;
+        }
+    }
 
     if ([[self superview] isKindOfClass:[CPClipView class]])
-        myClipviewSize = [[self superview] frame].size;
-
-    if ([_layoutManager extraLineFragmentTextContainer] === _textContainer)
-        rect = CGRectUnion(rect, [_layoutManager extraLineFragmentRect]);
-
-    if (_isHorizontallyResizable)
     {
-        rect = [_layoutManager boundingRectForGlyphRange:CPMakeRange(0, MAX(0, [_layoutManager numberOfCharacters] - 1)) inTextContainer:_textContainer]; // needs expensive "deep" recalculation
+        var myClipviewSize = [[self superview] frame].size;
 
-        desiredSize.width = rect.size.width + 2 * _textContainerInset.width;
-
-        if (desiredSize.width < minSize.width)
-            desiredSize.width = minSize.width;
-        else if (desiredSize.width > maxSize.width)
-            desiredSize.width = maxSize.width;
-    }
-
-    if (_isVerticallyResizable)
-    {
-        desiredSize.height = rect.size.height + 2 * _textContainerInset.height;
-
-        if (desiredSize.height < minSize.height)
-            desiredSize.height = minSize.height;
-        else if (desiredSize.height > maxSize.height)
-            desiredSize.height = maxSize.height;
-    }
-
-    if (myClipviewSize)
-    {
         if (desiredSize.width < myClipviewSize.width)
             desiredSize.width = myClipviewSize.width;
         if (desiredSize.height < myClipviewSize.height)
@@ -2031,9 +2170,15 @@ Sets the selection to a range of characters in response to user action.
     if (CPEmptyRange(aRange))
     {
         if (aRange.location >= [_layoutManager numberOfCharacters])
-            rect = [_layoutManager extraLineFragmentRect];
+        {
+            rect = CGRectCreateCopy([_layoutManager extraLineFragmentRect]);
+            rect.size.width = 1.0;
+        }
         else
-            rect = [_layoutManager lineFragmentRectForGlyphAtIndex:aRange.location effectiveRange:nil];
+        {
+            rect = CGRectCreateCopy([_layoutManager boundingRectForGlyphRange:CPMakeRange(aRange.location, 1) inTextContainer:_textContainer]);
+            rect.size.width = 1.0;
+        }
     }
     else
     {
@@ -2168,6 +2313,9 @@ Sets the selection to a range of characters in response to user action.
 
 - (BOOL)shouldDrawInsertionPoint
 {
+    if (![self isEditable])
+        return NO;
+
     return (_selectionRange.length === 0 && [self _isFocused] && !_placeholderString);
 }
 
@@ -2189,23 +2337,24 @@ Sets the selection to a range of characters in response to user action.
 
     var loc = (_selectionRange.location == numberOfGlyphs) ? _selectionRange.location - 1 : _selectionRange.location,
         caretOffset = [_layoutManager _characterOffsetAtLocation:loc],
-        oldYPosition = CGRectGetMaxY(caretRect),
-        caretDescend = [_layoutManager _descentAtLocation:loc];
+        font = [_textStorage attribute:CPFontAttributeName atIndex:loc effectiveRange:nil] || [self font];
 
     if (caretOffset > 0)
     {
         caretRect.origin.y += caretOffset;
-        caretRect.size.height = oldYPosition - caretRect.origin.y;
     }
 
-    if (caretDescend < 0)
-        caretRect.size.height -= caretDescend;
+    // Set the caret height to match the size of the active font
+    caretRect.size.height = [font size];
 
     if (_selectionRange.location == numberOfGlyphs)
         caretRect.origin.x += caretRect.size.width;
 
     caretRect.origin.x += _textContainerOrigin.x;
     caretRect.origin.y += _textContainerOrigin.y;
+
+    caretRect.size.width = MAX(1.0, caretRect.size.width);
+    caretRect.size.height = MAX(1.0, caretRect.size.height) + 2;
 
     return caretRect;
 }
@@ -2234,8 +2383,8 @@ Sets the selection to a range of characters in response to user action.
     [_caret setVisibility:YES];
 }
 
-#pragma mark -
-#pragma mark Dragging operation
+// MARK: -
+// MARK: Dragging operation
 
 - (void)performDragOperation:(CPDraggingInfo)aSender
 {
@@ -2311,6 +2460,410 @@ Sets the selection to a range of characters in response to user action.
 
 @end
 
+@implementation CPTextView (CPRulerSupport)
+
+- (void)updateRuler
+{
+    var scrollView = [self enclosingScrollView];
+    if (!scrollView || ![scrollView hasHorizontalRuler] || ![scrollView rulersVisible])
+        return;
+
+    var ruler = [scrollView horizontalRulerView];
+    if (!ruler)
+        return;
+
+    // Do not rebuild markers if user is currently dragging one
+    if ([ruler draggingMarker])
+        return;
+
+    var selectedRange = [self selectedRange],
+        paragraphStyle = [CPParagraphStyle defaultParagraphStyle],
+        currentAttributes = _typingAttributes;
+
+    var textLength = [_textStorage length];
+    if (textLength > 0)
+    {
+        var charIndex = selectedRange.location;
+
+        if (charIndex >= textLength)
+            charIndex = textLength - 1;
+
+        if (charIndex < 0)
+            charIndex = 0;
+
+        currentAttributes = [_textStorage attributesAtIndex:charIndex effectiveRange:nil];
+    }
+
+    if ([currentAttributes objectForKey:CPParagraphStyleAttributeName])
+        paragraphStyle = [currentAttributes objectForKey:CPParagraphStyleAttributeName];
+
+    var markers = [],
+        tabStops = [paragraphStyle tabStops],
+        count = [tabStops count];
+
+    for (var i = 0; i < count; i++)
+    {
+        var tab = [tabStops objectAtIndex:i],
+            marker = [[CPRulerMarker alloc] initWithRulerView:ruler 
+                                                      markerLocation:[tab location] 
+                                                          imageValue:[tab location] 
+                                                   representedObject:tab];
+        [markers addObject:marker];
+    }
+
+    var firstLineMarker = [[CPRulerMarker alloc] initWithRulerView:ruler 
+                                                    markerLocation:[paragraphStyle firstLineHeadIndent] 
+                                                        imageValue:[paragraphStyle firstLineHeadIndent] 
+                                                 representedObject:@"CPFirstLineIndent"];
+    [markers addObject:firstLineMarker];
+
+    var headMarker = [[CPRulerMarker alloc] initWithRulerView:ruler 
+                                                markerLocation:[paragraphStyle headIndent] 
+                                                    imageValue:[paragraphStyle headIndent] 
+                                             representedObject:@"CPHeadIndent"];
+    [markers addObject:headMarker];
+
+    [ruler setMarkers:markers];
+}
+
+var compareTabStops = function(obj1, obj2, context) {
+    if ([obj1 location] < [obj2 location]) return CPOrderedAscending;
+    if ([obj1 location] > [obj2 location]) return CPOrderedDescending;
+    return CPOrderedSame;
+};
+
+- (void)rulerView:(CPRulerView)rulerView didAddMarker:(CPRulerMarker)marker
+{
+    var selectedRange = [self selectedRange],
+        paragraphStyle = [CPParagraphStyle defaultParagraphStyle],
+        currentAttributes = _typingAttributes;
+
+    var textLength = [_textStorage length],
+        charIndex = selectedRange.location;
+
+    if (textLength > 0)
+    {
+        if (charIndex >= textLength)
+            charIndex = textLength - 1;
+
+        if (charIndex < 0)
+            charIndex = 0;
+
+        currentAttributes = [_textStorage attributesAtIndex:charIndex effectiveRange:nil];
+    }
+
+    if ([currentAttributes objectForKey:CPParagraphStyleAttributeName])
+        paragraphStyle = [currentAttributes objectForKey:CPParagraphStyleAttributeName];
+
+    var mutableStyle = [paragraphStyle mutableCopy],
+        newTab = [[CPTextTab alloc] initWithType:CPLeftTextAlignment location:[marker imageValue]],
+        tabs = [[mutableStyle tabStops] mutableCopy];
+
+    [tabs addObject:newTab];
+    [tabs sortUsingFunction:compareTabStops context:nil];
+
+    [mutableStyle setTabStops:tabs];
+    [marker setRepresentedObject:newTab];
+
+    var targetRange = selectedRange;
+    if (targetRange.length === 0 && textLength > 0)
+        targetRange = [self selectionRangeForProposedRange:CPMakeRange(targetRange.location, 0) granularity:CPSelectByParagraph];
+
+    if (targetRange.length > 0)
+    {
+        [_textStorage addAttribute:CPParagraphStyleAttributeName value:mutableStyle range:CPMakeRangeCopy(targetRange)];
+        [_layoutManager textStorage:_textStorage edited:0 range:CPMakeRangeCopy(targetRange) changeInLength:0 invalidatedRange:CPMakeRangeCopy(targetRange)];
+    }
+
+    [_typingAttributes setObject:mutableStyle forKey:CPParagraphStyleAttributeName];
+    [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeTypingAttributesNotification object:self];
+}
+
+- (void)rulerView:(CPRulerView)rulerView didMoveMarker:(CPRulerMarker)marker
+{
+    var selectedRange = [self selectedRange],
+        paragraphStyle = [CPParagraphStyle defaultParagraphStyle],
+        currentAttributes = _typingAttributes;
+
+    var textLength = [_textStorage length],
+        charIndex = selectedRange.location;
+
+    if (textLength > 0)
+    {
+        if (charIndex >= textLength)
+            charIndex = textLength - 1;
+
+        if (charIndex < 0)
+            charIndex = 0;
+
+        currentAttributes = [_textStorage attributesAtIndex:charIndex effectiveRange:nil];
+    }
+
+    if ([currentAttributes objectForKey:CPParagraphStyleAttributeName])
+        paragraphStyle = [currentAttributes objectForKey:CPParagraphStyleAttributeName];
+
+    var mutableStyle = [paragraphStyle mutableCopy],
+        rep = [marker representedObject];
+
+    if (!rep)
+        return;
+
+    // A. Handle standard tab stops
+    if ([rep isKindOfClass:[CPTextTab class]])
+    {
+        var newTab = [[CPTextTab alloc] initWithType:[rep alignment] location:[marker imageValue]],
+            tabs = [[mutableStyle tabStops] mutableCopy];
+
+        [tabs removeObject:rep];
+        [tabs addObject:newTab];
+        [tabs sortUsingFunction:compareTabStops context:nil];
+
+        [mutableStyle setTabStops:tabs];
+        [marker setRepresentedObject:newTab];
+    }
+
+    // B. Handle Indentation Marker drags directly by string literal
+    else if (rep === @"CPFirstLineIndent")
+        [mutableStyle setFirstLineHeadIndent:[marker imageValue]];
+    else if (rep === @"CPHeadIndent")
+        [mutableStyle setHeadIndent:[marker imageValue]];
+    else if (rep === @"CPTailIndent")
+        [mutableStyle setTailIndent:[marker imageValue]];
+
+    var targetRange = selectedRange;
+
+    if (targetRange.length === 0 && textLength > 0)
+        targetRange = [self selectionRangeForProposedRange:CPMakeRange(targetRange.location, 0) granularity:CPSelectByParagraph];
+
+    if (targetRange.length > 0)
+    {
+        [_textStorage addAttribute:CPParagraphStyleAttributeName value:mutableStyle range:CPMakeRangeCopy(targetRange)];
+        [_layoutManager textStorage:_textStorage edited:0 range:CPMakeRangeCopy(targetRange) changeInLength:0 invalidatedRange:CPMakeRangeCopy(targetRange)];
+    }
+
+    [_typingAttributes setObject:mutableStyle forKey:CPParagraphStyleAttributeName];
+
+    [_layoutManager _validateLayoutAndGlyphs];
+    [self sizeToFit];
+    [self setNeedsDisplay:YES];
+}
+
+- (void)rulerView:(CPRulerView)rulerView didRemoveMarker:(CPRulerMarker)marker
+{
+    var selectedRange = [self selectedRange],
+        paragraphStyle = [CPParagraphStyle defaultParagraphStyle],
+        currentAttributes = _typingAttributes;
+
+    var textLength = [_textStorage length],
+        charIndex = selectedRange.location;
+
+    if (textLength > 0)
+    {
+        if (charIndex >= textLength) charIndex = textLength - 1;
+        if (charIndex < 0) charIndex = 0;
+        currentAttributes = [_textStorage attributesAtIndex:charIndex effectiveRange:nil];
+    }
+
+    if ([currentAttributes objectForKey:CPParagraphStyleAttributeName])
+        paragraphStyle = [currentAttributes objectForKey:CPParagraphStyleAttributeName];
+
+    var mutableStyle = [paragraphStyle mutableCopy],
+        oldTab = [marker representedObject];
+
+    if (!oldTab)
+        return;
+
+    var tabs = [[mutableStyle tabStops] mutableCopy];
+    [tabs removeObject:oldTab];
+    [mutableStyle setTabStops:tabs];
+
+    var targetRange = selectedRange;
+    if (targetRange.length === 0 && textLength > 0)
+        targetRange = [self selectionRangeForProposedRange:CPMakeRange(targetRange.location, 0) granularity:CPSelectByParagraph];
+
+    if (targetRange.length > 0)
+    {
+        [_textStorage addAttribute:CPParagraphStyleAttributeName value:mutableStyle range:CPMakeRangeCopy(targetRange)];
+        [_layoutManager textStorage:_textStorage edited:0 range:CPMakeRangeCopy(targetRange) changeInLength:0 invalidatedRange:CPMakeRangeCopy(targetRange)];
+    }
+
+    [_typingAttributes setObject:mutableStyle forKey:CPParagraphStyleAttributeName];
+    [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeTypingAttributesNotification object:self];
+}
+
+- (void)rulerView:(CPRulerView)rulerView didUpdateMarker:(CPRulerMarker)marker oldTab:(id)oldTab
+{
+    var selectedRange = [self selectedRange],
+        targetRange = selectedRange;
+
+    if (targetRange.length === 0)
+        targetRange = [self selectionRangeForProposedRange:CPMakeRange(targetRange.location, 0) granularity:CPSelectByParagraph];
+
+    if (targetRange.length === 0)
+        return;
+
+    var paragraphStyle = [[self textStorage] attribute:CPParagraphStyleAttributeName atIndex:targetRange.location effectiveRange:NULL];
+    if (!paragraphStyle)
+        paragraphStyle = [CPParagraphStyle defaultParagraphStyle];
+
+    var mutableStyle = [paragraphStyle mutableCopy],
+        newTab = [marker representedObject],
+        tabs = [[mutableStyle tabStops] mutableCopy];
+
+    [tabs removeObject:oldTab];
+    [tabs addObject:newTab];
+    [tabs sortUsingFunction:compareTabStops context:nil];
+    [mutableStyle setTabStops:tabs];
+
+    [_textStorage addAttribute:CPParagraphStyleAttributeName value:mutableStyle range:CPMakeRangeCopy(targetRange)];
+    [_layoutManager textStorage:_textStorage edited:0 range:CPMakeRangeCopy(targetRange) changeInLength:0 invalidatedRange:CPMakeRangeCopy(targetRange)];
+
+    if (selectedRange.length === 0)
+    {
+        [_typingAttributes setObject:mutableStyle forKey:CPParagraphStyleAttributeName];
+        [[CPNotificationCenter defaultCenter] postNotificationName:CPTextViewDidChangeTypingAttributesNotification object:self];
+    }
+
+    [_layoutManager _validateLayoutAndGlyphs];
+    [self sizeToFit];
+    [self setNeedsDisplay:YES];
+}
+
+- (float)rulerView:(CPRulerView)aRulerView willMoveMarker:(CPRulerMarker)aMarker toLocation:(float)proposedLocation
+{
+    var rep = [aMarker representedObject];
+
+    // Indent markers can be dragged anywhere >= 0
+    if (rep === @"CPFirstLineIndent" || rep === @"CPHeadIndent" || rep === @"CPTailIndent")
+        return Math.max(0.0, proposedLocation);
+
+    var textLength = [_textStorage length];
+    if (textLength === 0)
+        return Math.max(0.0, proposedLocation);
+
+    var selectedRange = [self selectedRange],
+        targetRange = selectedRange;
+
+    if (targetRange.length === 0)
+        targetRange = [self selectionRangeForProposedRange:CPMakeRange(targetRange.location, 0) granularity:CPSelectByParagraph];
+
+    if (targetRange.length === 0)
+        return Math.max(0.0, proposedLocation);
+
+    [_layoutManager _validateLayoutAndGlyphs];
+
+    var theString = [_textStorage string],
+        minLocation = 0.0,
+        containerWidth = [_textContainer containerSize].width,
+        maxLocation = containerWidth,
+        currentParagraphStyle = [_textStorage attribute:CPParagraphStyleAttributeName atIndex:targetRange.location effectiveRange:nil] || [CPParagraphStyle defaultParagraphStyle],
+        tabStops = [currentParagraphStyle tabStops] || [],
+        tabCount = [tabStops count];
+
+    // 1. Right boundary: Tail indent (if configured)
+    var tailIndent = [currentParagraphStyle tailIndent];
+    if (tailIndent > 0.0)
+        maxLocation = Math.min(maxLocation, tailIndent);
+    else if (tailIndent < 0.0)
+        maxLocation = Math.min(maxLocation, containerWidth + tailIndent);
+
+    // 2. Identify active tab stop index
+    var targetTabIndex = -1;
+    for (var i = 0; i < tabCount; i++)
+    {
+        var tab = [tabStops objectAtIndex:i];
+        if (tab === rep || ([tab location] === [rep location] && [tab alignment] === [rep alignment]))
+        {
+            targetTabIndex = i;
+            break;
+        }
+    }
+
+    // 3. Constrain to neighboring tab stops (Left and Right)
+    var safetySpacer = 2.0;
+
+    if (targetTabIndex !== -1)
+    {
+        // Left neighbor constraint (previous tab stop)
+        if (targetTabIndex > 0)
+        {
+            var prevTab = [tabStops objectAtIndex:targetTabIndex - 1];
+            minLocation = Math.max(minLocation, [prevTab location] + safetySpacer);
+        }
+
+        // Right neighbor constraint (next tab stop)
+        if (targetTabIndex + 1 < tabCount)
+        {
+            var nextTab = [tabStops objectAtIndex:targetTabIndex + 1];
+            maxLocation = Math.min(maxLocation, [nextTab location] - safetySpacer);
+        }
+    }
+    else
+    {
+        // For new markers being added between existing tab stops
+        for (var i = 0; i < tabCount; i++)
+        {
+            var tabLoc = [[tabStops objectAtIndex:i] location];
+            if (tabLoc < proposedLocation)
+                minLocation = Math.max(minLocation, tabLoc + safetySpacer);
+            else if (tabLoc > proposedLocation)
+                maxLocation = Math.min(maxLocation, tabLoc - safetySpacer);
+        }
+    }
+
+    // 4. Constrain to preceding text on active lines
+    var start = targetRange.location,
+        end = CPMaxRange(targetRange),
+        tabCountInLine = 0,
+        lineStart = start;
+
+    for (var i = start; i < end; i++)
+    {
+        var charCode = theString.charCodeAt(i);
+        if (charCode === 10 || charCode === 13)
+        {
+            tabCountInLine = 0;
+            lineStart = i + 1;
+            continue;
+        }
+
+        if (charCode === 9) // '\t'
+        {
+            if (tabCountInLine === targetTabIndex || targetTabIndex === -1)
+            {
+                var precedingX = 0.0;
+                if (i === lineStart)
+                {
+                    var isFirstLine = (lineStart === 0 || theString.charCodeAt(lineStart - 1) === 10 || theString.charCodeAt(lineStart - 1) === 13);
+                    precedingX = isFirstLine ? [currentParagraphStyle firstLineHeadIndent] : [currentParagraphStyle headIndent];
+                }
+                else
+                {
+                    var glyphRect = [_layoutManager boundingRectForGlyphRange:CPMakeRange(i - 1, 1) inTextContainer:_textContainer];
+                    precedingX = CGRectGetMaxX(glyphRect);
+                }
+
+                var textLimit = precedingX + safetySpacer;
+                if (textLimit > minLocation)
+                    minLocation = textLimit;
+            }
+            tabCountInLine++;
+        }
+    }
+
+    if (minLocation > maxLocation)
+        minLocation = maxLocation;
+
+    // 5. Clamp proposedLocation within [minLocation, maxLocation]
+    return Math.min(maxLocation, Math.max(minLocation, proposedLocation));
+}
+
+- (float)rulerView:(CPRulerView)aRulerView willAddMarker:(CPRulerMarker)aMarker atLocation:(float)proposedLocation
+{
+    return [self rulerView:aRulerView willMoveMarker:aMarker toLocation:proposedLocation];
+}
+
+@end
 
 @implementation CPTextView (CPTextViewDelegate)
 
@@ -2382,7 +2935,11 @@ var CPTextViewAllowsUndoKey = @"CPTextViewAllowsUndoKey",
     CPTextViewTextStorageKey = @"CPTextViewTextStorageKey",
     CPTextViewInsertionPointColorKey = @"CPTextViewInsertionPointColorKey",
     CPTextViewSelectedTextAttributesKey = @"CPTextViewSelectedTextAttributesKey",
-    CPTextViewDelegateKey = @"CPTextViewDelegateKey";
+    CPTextViewDelegateKey = @"CPTextViewDelegateKey",
+    CPTextViewHorizontallyResizableKey = @"CPTextViewHorizontallyResizableKey",
+    CPTextViewVerticallyResizableKey = @"CPTextViewVerticallyResizableKey",
+    CPMaxSize = @"CPMaxSize";
+
 
 @implementation CPTextView (CPCoding)
 
@@ -2416,13 +2973,22 @@ var CPTextViewAllowsUndoKey = @"CPTextViewAllowsUndoKey",
 
         _typingAttributes = [[_textStorage attributesAtIndex:0 effectiveRange:nil] copy];
 
+        if (!_typingAttributes)
+            _typingAttributes = [CPMutableDictionary dictionary];
+
         if (![_typingAttributes valueForKey:CPForegroundColorAttributeName])
             [_typingAttributes setObject:[CPColor blackColor] forKey:CPForegroundColorAttributeName];
 
         _textColor = [_typingAttributes valueForKey:CPForegroundColorAttributeName];
-        [self setFont:[_typingAttributes valueForKey:CPFontAttributeName]];
+
+        var decodedFont = [_typingAttributes valueForKey:CPFontAttributeName] || [CPFont systemFontOfSize:12.0];
+        [self setFont:decodedFont];
 
         [self setString:[_textStorage string]];
+
+        [self setMaxSize:[aCoder decodeSizeForKey:CPMaxSize]];
+        [self setHorizontallyResizable:[aCoder decodeBoolForKey:CPTextViewHorizontallyResizableKey]];
+        [self setVerticallyResizable:[aCoder decodeBoolForKey:CPTextViewVerticallyResizableKey]]
     }
 
     return self;
@@ -2438,6 +3004,9 @@ var CPTextViewAllowsUndoKey = @"CPTextViewAllowsUndoKey",
     [aCoder encodeObject:_selectedTextAttributes forKey:CPTextViewSelectedTextAttributesKey];
     [aCoder encodeBool:_allowsUndo forKey:CPTextViewAllowsUndoKey];
     [aCoder encodeBool:_usesFontPanel forKey:CPTextViewUsesFontPanelKey];
+    [aCoder encodeBool:_isHorizontallyResizable forKey:CPTextViewHorizontallyResizableKey];
+    [aCoder encodeBool:_isVerticallyResizable forKey:CPTextViewVerticallyResizableKey];
+    [aCoder encodeSize:_maxSize forKey:CPMaxSize];
 }
 
 @end
@@ -2597,8 +3166,8 @@ var CPTextViewAllowsUndoKey = @"CPTextViewAllowsUndoKey",
 {
     var rect = [_textView._layoutManager boundingRectForGlyphRange:CPMakeRange(aLoc, 1) inTextContainer:_textView._textContainer];
 
-	if (aLoc >= [_textView._layoutManager numberOfCharacters])
-		rect.origin.x = CGRectGetMaxX(rect);
+    if (aLoc >= [_textView._layoutManager numberOfCharacters])
+        rect.origin.x = CGRectGetMaxX(rect);
 
     [self setRect:rect];
 }
@@ -2607,52 +3176,28 @@ var CPTextViewAllowsUndoKey = @"CPTextViewAllowsUndoKey",
 
 
 var _CPNativeInputField,
-    _CPNativeInputFieldKeyDownCalled,
-    _CPNativeInputFieldKeyUpCalled,
-    _CPNativeInputFieldKeyPressedCalled,
-    _CPNativeInputFieldActive;
+    _isComposing = NO; // Flag to track if an IME/dead key session is active.
 
 var _CPCopyPlaceholder = '-';
 
 @implementation _CPNativeInputManager : CPObject
 
-+ (BOOL)isNativeInputFieldActive
++ (void)isDeadKey:(CPEvent)event
 {
-    return _CPNativeInputFieldActive;
-}
-
-+ (void)cancelCurrentNativeInputSession
-{
-
 #if PLATFORM(DOM)
-    _CPNativeInputField.innerHTML = '';
+    return event._DOMEvent && (event._DOMEvent.key === 'Dead' || event._DOMEvent.key === 'Process');
 #endif
-
-    [self _endInputSessionWithString:_CPNativeInputField.innerHTML];
+    return NO;
 }
 
 + (void)cancelCurrentInputSessionIfNeeded
 {
-    if (!_CPNativeInputFieldActive)
-        return;
-
-    [self cancelCurrentNativeInputSession];
-}
-
-+ (void)_endInputSessionWithString:(CPString)aStr
-{
-    _CPNativeInputFieldActive = NO;
-
-    var currentFirstResponder = [[CPApp keyWindow] firstResponder],
-        placeholderRange = CPMakeRange([currentFirstResponder selectedRange].location - 1, 1);
-
-    [currentFirstResponder setSelectedRange:placeholderRange];
-    [currentFirstResponder insertText:aStr];
-    _CPNativeInputField.innerHTML = '';
-
-
-    [self hideInputElement];
-    [currentFirstResponder updateInsertionPointStateAndRestartTimer:YES];
+#if PLATFORM(DOM)
+    if (_CPNativeInputField) {
+        _CPNativeInputField.innerHTML = '';
+    }
+    _isComposing = NO;
+#endif
 }
 
 + (void)initialize
@@ -2660,246 +3205,217 @@ var _CPCopyPlaceholder = '-';
 #if PLATFORM(DOM)
     _CPNativeInputField = document.createElement("div");
     _CPNativeInputField.contentEditable = YES;
-    _CPNativeInputField.style.width = "64px";
-    _CPNativeInputField.style.zIndex = 10000;
+
+    // Style the input field to be invisible but focusable
     _CPNativeInputField.style.position = "absolute";
-    _CPNativeInputField.style.visibility = "visible";
-    _CPNativeInputField.style.padding = "0px";
-    _CPNativeInputField.style.margin = "0px";
+    _CPNativeInputField.style.top = "-1000px";
+    _CPNativeInputField.style.left = "-1000px";
+    _CPNativeInputField.style.width = "1px";
+    _CPNativeInputField.style.height = "1px";
+    _CPNativeInputField.style.opacity = "0";
+    _CPNativeInputField.style.overflow = "hidden";
     _CPNativeInputField.style.whiteSpace = "pre";
-    _CPNativeInputField.style.outline = "0px solid transparent";
+    _CPNativeInputField.style.zIndex = -1; // Put it behind everything
 
     document.body.appendChild(_CPNativeInputField);
 
-    _CPNativeInputField.addEventListener("keyup", function(e)
+    // Central function to handle inserting text into the CPTextView
+    var handleInput = function(textToInsert)
     {
-        _CPNativeInputFieldKeyUpCalled = YES;
-
-        // filter out the shift-up, cursor keys and friends used to access the deadkeys
-        // fixme: e.which is depreciated(?) -> find a better way to identify the modifier-keyups
-        if (e.which < 27 || e.which == 91 || e.which == 93) // include apple command keys
-        {
-            if (e.which == 13)
-                _CPNativeInputField.innerHTML = '';
-
-            if (_CPNativeInputField.innerHTML.length == 0 || _CPNativeInputField.innerHTML.length > 2) // backspace
-                [self cancelCurrentInputSessionIfNeeded];
-
-            return false; // prevent the default behaviour
-        }
+        if (!textToInsert)
+            return;
 
         var currentFirstResponder = [[CPApp keyWindow] firstResponder];
 
-        if (![currentFirstResponder respondsToSelector:@selector(_activateNativeInputElement:)])
-            return false; // prevent the default behaviour
+        if (currentFirstResponder && [currentFirstResponder respondsToSelector:@selector(insertText:)])
+            var event = [CPApp currentEvent];
 
-        var charCode = _CPNativeInputField.innerHTML.charCodeAt(0);
+            if (!event._isKeyEquivalent)
+                setTimeout(function(){
+                    [currentFirstResponder insertText:textToInsert]
+                }, 20);
 
-        // å and Å need to be filtered out in keyDown: due to chrome inserting 229 on a deadkey
-        if (charCode == 229 || charCode == 197)
+        // Clear the field immediately after grabbing its content.
+        _CPNativeInputField.innerHTML = '';
+    };
+
+    // Intercept problematic keys before the browser acts.
+    _CPNativeInputField.addEventListener('keydown', function(e) {
+
+        if (e.key === 'Tab' || e.key === 'Enter' || (e.key === 'Backspace' && _CPNativeInputField.innerHTML === ''))
         {
-            [currentFirstResponder insertText:_CPNativeInputField.innerHTML];
+            // Prevent browser default action:
+            // - 'Tab': Prevents browser focus navigation, allowing Cappuccino key bindings (like option-tab or tab) to work.
+            // - 'Enter': Prevents inserting <div><br></div>.
+            // - 'Backspace' on empty: Prevents inserting junk characters on iPadOS.
+            e.preventDefault();
+        }
+    });
+
+    // This listener handles all other character input.
+    _CPNativeInputField.addEventListener('input', function(e)
+    {
+        // If we are in a composition (e.g., IME), do nothing yet.
+        if (_isComposing)
+            return;
+
+        // Safety net: ignore deletion events, as they are handled by keydown.
+        if (e.inputType && e.inputType.startsWith('delete'))
+        {
             _CPNativeInputField.innerHTML = '';
             return;
         }
 
-        // chrome-trigger: keypressed is omitted for deadkeys
-        if (!_CPNativeInputFieldActive && _CPNativeInputFieldKeyPressedCalled == NO && _CPNativeInputField.innerHTML.length && _CPNativeInputField.innerHTML != _CPCopyPlaceholder && _CPNativeInputField.innerHTML.length < 3)
-        {
-            _CPNativeInputFieldActive = YES;
-            [currentFirstResponder _activateNativeInputElement:_CPNativeInputField];
-        }
-        else
-        {
-            if (_CPNativeInputFieldActive)
-                [self _endInputSessionWithString:_CPNativeInputField.innerHTML];
+        // Prefer e.data to capture the exact inserted character(s) from key entry.
+        // This avoids harvesting structural markup or stale carriage returns
+        // introduced by the browser's selection layout.
+        var textToInsert = (e.data !== undefined && e.data !== null) ? e.data : e.target.textContent;
 
-            // prevent the copy placeholder beeing removed by cursor keys
-            if (_CPNativeInputFieldKeyPressedCalled)
-               _CPNativeInputField.innerHTML = '';
-        }
+        handleInput(textToInsert);
+    });
 
-        _CPNativeInputFieldKeyDownCalled = NO;
+    // Fires when a composition session starts (e.g., user presses a dead key or starts an IME).
+    _CPNativeInputField.addEventListener('compositionstart', function(e) {
+        _isComposing = YES;
+    });
 
-        return false; // prevent the default behaviour
-    }, true);
+    // Fires when the composition is finished.
+    _CPNativeInputField.addEventListener('compositionend', function(e) {
+        // The composition is over. `e.data` has the final string (e.g., "é").
+        handleInput(e.data);
+        _isComposing = NO;
+    });
 
-    _CPNativeInputField.addEventListener("keydown", function(e)
-    {
-        // this protects from heavy typing and the shift key
-        if (_CPNativeInputFieldKeyDownCalled)
-            return true;
-
-        _CPNativeInputFieldKeyDownCalled = YES;
-        _CPNativeInputFieldKeyUpCalled = NO;
-        _CPNativeInputFieldKeyPressedCalled = NO;
-        var currentFirstResponder = [[CPApp keyWindow] firstResponder];
-
-        // webkit-browsers: cursor keys do not emit keypressed and would otherwise activate deadkey mode
-        if (!CPBrowserIsEngine(CPGeckoBrowserEngine) && e.which >= 37 && e.which <= 40)
-            _CPNativeInputFieldKeyPressedCalled = YES;
-
-        if (![currentFirstResponder respondsToSelector:@selector(_activateNativeInputElement:)])
-            return;
-
-        // FF-trigger: here the best way to detect a dead key is the missing keyup event
-        if (CPBrowserIsEngine(CPGeckoBrowserEngine))
-            setTimeout(function(){
-                _CPNativeInputFieldKeyDownCalled = NO;
-
-                if (!_CPNativeInputFieldActive && _CPNativeInputFieldKeyUpCalled == NO && _CPNativeInputField.innerHTML.length && _CPNativeInputField.innerHTML != _CPCopyPlaceholder && _CPNativeInputField.innerHTML.length < 3 && !e.repeat)
-                {
-                    _CPNativeInputFieldActive = YES;
-                    [currentFirstResponder _activateNativeInputElement:_CPNativeInputField];
-                }
-                else if (!_CPNativeInputFieldActive)
-                    [self hideInputElement];
-            }, 200);
-
-        return false;
-    }, true); // capture mode
-
-    _CPNativeInputField.addEventListener("keypress", function(e)
-    {
-        _CPNativeInputFieldKeyUpCalled = YES;
-        _CPNativeInputFieldKeyPressedCalled = YES;
-        return false;
-
-    }, true); // capture mode
-
+    // PASTE handler
     _CPNativeInputField.onpaste = function(e)
     {
-        var nativeClipboard = (e.originalEvent || e).clipboardData,
-            richtext,
-            pasteboard = [CPPasteboard generalPasteboard],
-            currentFirstResponder = [[CPApp keyWindow] firstResponder],
-            isPlain = NO;
+        e.preventDefault();
+        var nativeClipboard = (e.originalEvent || e).clipboardData;
+        var currentFirstResponder = [[CPApp keyWindow] firstResponder];
 
-        if ([currentFirstResponder respondsToSelector:@selector(isRichText)] && ![currentFirstResponder isRichText])
-            isPlain = YES;
-
-        // this is the rich chrome / FF codepath (where we can use RTF directly)
-        if ((richtext = nativeClipboard.getData('text/rtf')) && !(!!(e.originalEvent || e).shiftKey) && !isPlain)
+        // Can we accept richtext? Then this is our preference (fixme: shift key to force plain text paste)
+        if ([currentFirstResponder isRichText])
         {
-            e.preventDefault();
+            var richtext = nativeClipboard.getData('text/rtf');
 
-            // setTimeout to prevent flickering in FF
-            setTimeout(function(){
-                [currentFirstResponder insertText:[[_CPRTFParser new] parseRTF:richtext]]
-            }, 20);
+            // prefer RTF form the outside of cappuccino
+            if (richtext)
+                richtext = [[_CPRTFParser new] parseRTF:richtext];
+            else
+            {
+                var pasteboard = [CPPasteboard generalPasteboard];
+                // If no RTF is available, try to get the internal represatation of richtext from the pasteboard
+                var richData = [pasteboard stringForType:_CPASPboardType];
 
-            return false;
+                if (richData)
+                    richtext = [CPKeyedUnarchiver unarchiveObjectWithData:[CPData dataWithRawString:richData]];
+            }
+
+            if (richtext)
+            {
+                var shouldPastePlainText = [[CPApp currentEvent] modifierFlags] & (CPShiftKeyMask | CPAlternateKeyMask);
+
+                if (shouldPastePlainText && richtext._string)
+                    richtext = richtext._string;
+
+                [currentFirstResponder _pasteString:richtext];
+
+                return;
+            }
+            // If no richtext is available, fall back to plain text
         }
 
-        // plain is the same in all browsers...
+        var nativeString = nativeClipboard.getData('text/plain');
 
-        var data = e.clipboardData.getData('text/plain'),
-            cappString = [pasteboard stringForType:CPStringPboardType];
-
-        if (cappString != data)
+        // Use setTimeout to prevent flickering
+        setTimeout(function()
         {
-            [pasteboard declareTypes:[CPStringPboardType] owner:nil];
-            [pasteboard setString:data forType:CPStringPboardType];
-        }
-
-        setTimeout(function(){   // prevent dom-flickering (only needed for FF)
-            [currentFirstResponder paste:self];
+            [currentFirstResponder _pasteString:nativeString || [pasteboard stringForType:CPStringPboardType] || ''];
         }, 20);
-
-        return false;
     };
 
-    if (CPBrowserIsEngine(CPGeckoBrowserEngine))
+    // COPY handler
+    _CPNativeInputField.oncopy = function(e)
     {
-        _CPNativeInputField.oncopy = function(e)
+        e.preventDefault();
+        var pasteboard = [CPPasteboard generalPasteboard];
+        var nativeClipboard = (e.originalEvent || e).clipboardData;
+
+        // First, copy the data to populate the CP clipboard
+        [[[CPApp keyWindow] firstResponder] copy:self];
+
+        // Now, copy the data over to the native clipboard
+        var stringForPasting = [pasteboard stringForType:CPStringPboardType] || '';
+        nativeClipboard.setData('text/plain', stringForPasting);
+
+        var rtfForPasting = [pasteboard stringForType:CPRTFPboardType];
+
+        if (rtfForPasting)
+            nativeClipboard.setData('text/rtf', rtfForPasting);
+    };
+
+    // CUT handler
+    _CPNativeInputField.oncut = function(e)
+    {
+        e.preventDefault();
+        var pasteboard = [CPPasteboard generalPasteboard];
+        var nativeClipboard = (e.originalEvent || e).clipboardData;
+        var currentFirstResponder = [[CPApp keyWindow] firstResponder];
+
+        // First, copy the data to populate the CP clipboard
+        [currentFirstResponder copy:self];
+
+        // Now, copy the data to the native clipboard
+        var stringForPasting = [pasteboard stringForType:CPStringPboardType] || '';
+        nativeClipboard.setData('text/plain', stringForPasting);
+        var rtfForPasting = [pasteboard stringForType:CPRTFPboardType];
+
+        if (rtfForPasting)
+            nativeClipboard.setData('text/rtf', rtfForPasting);
+
+        // Then, perform the delete part of the cut operation in the text view
+        // Use setTimeout to prevent flickering
+        setTimeout(function()
         {
-            var pasteboard = [CPPasteboard generalPasteboard],
-                string,
-                currentFirstResponder = [[CPApp keyWindow] firstResponder];
-
-            [currentFirstResponder copy:self];
-
-            var stringForPasting = [pasteboard stringForType:CPStringPboardType];
-            e.clipboardData.setData('text/plain', stringForPasting);
-
-            return false;
-        };
-
-        _CPNativeInputField.oncut = function(e)
-        {
-            var pasteboard = [CPPasteboard generalPasteboard],
-                string,
-                currentFirstResponder = [[CPApp keyWindow] firstResponder];
-
-            // prevent dom-flickering
-            setTimeout(function(){
-                [currentFirstResponder cut:self];
-            }, 20);
-
-            // this is necessary because cut will only execute in the future
-            [currentFirstResponder copy:self];
-
-            var stringForPasting = [pasteboard stringForType:CPStringPboardType];
-
-            e.clipboardData.setData('text/plain', stringForPasting);
-
-            return false;
-        }
-    }
+            [currentFirstResponder deleteBackward:self];
+        }, 20);
+    };
 #endif
 }
 
 + (void)focusForTextView:(CPTextView)currentFirstResponder
 {
-    if (![currentFirstResponder respondsToSelector:@selector(_activateNativeInputElement:)])
-        return;
-
-    [self hideInputElement];
-
 #if PLATFORM(DOM)
-    _CPNativeInputField.focus();
-#endif
 
+    if (_CPNativeInputField && document.activeElement !== _CPNativeInputField)
+        _CPNativeInputField.focus();
+#endif
 }
 
 + (void)focusForClipboardOfTextView:(CPTextView)textview
 {
-
 #if PLATFORM(DOM)
-    if (!_CPNativeInputFieldActive && _CPNativeInputField.innerHTML.length == 0)
-        _CPNativeInputField.innerHTML = _CPCopyPlaceholder;  // make sure we have a selection to allow the native pasteboard work in safari
+    var selectedRange = [textview selectedRange];
+    if (selectedRange.length > 0) {
+        // Put the selected text into the hidden div so the browser can natively copy it.
+        var textToCopy = [[[textview textStorage] string] substringWithRange:selectedRange];
+        _CPNativeInputField.innerHTML = textToCopy;
+    } else {
+        // For paste, we just need the field to be focusable.
+        _CPNativeInputField.innerHTML = _CPCopyPlaceholder;
+    }
 
     [self focusForTextView:textview];
 
-    // select all in the contenteditable div (http://stackoverflow.com/questions/12243898/how-to-select-all-text-in-contenteditable-div)
-    if (document.body.createTextRange)
-    {
-        var range = document.body.createTextRange();
-
-        range.moveToElementText(_CPNativeInputField);
-        range.select();
-    }
-    else if (window.getSelection)
-    {
-        var selection = window.getSelection(),
-            range = document.createRange();
-
+    // Select the content of the hidden div so copy/cut works.
+    if (window.getSelection && document.createRange) {
+        var selection = window.getSelection();
+        var range = document.createRange();
         range.selectNodeContents(_CPNativeInputField);
         selection.removeAllRanges();
         selection.addRange(range);
     }
 #endif
-
-}
-
-+ (void)hideInputElement
-{
-
-#if PLATFORM(DOM)
-    _CPNativeInputField.style.top = "-10000px";
-    _CPNativeInputField.style.left = "-10000px";
-#endif
-
 }
 
 @end

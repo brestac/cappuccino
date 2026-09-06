@@ -231,8 +231,8 @@ var _separatorsCharacterSet = nil;
 }
 
 
-#pragma mark -
-#pragma mark Setter Getter Helper
+// MARK: -
+// MARK: Setter Getter Helper
 
 /*! Return symbols for the given language code
 */
@@ -280,8 +280,8 @@ var _separatorsCharacterSet = nil;
     [languageSymbols setValue:aSymbol forKey:aKey];
 }
 
-#pragma mark -
-#pragma mark Setter Getter
+// MARK: -
+// MARK: Setter Getter
 
 /*! Return AMSymbol
 */
@@ -536,8 +536,8 @@ var _separatorsCharacterSet = nil;
 }
 
 
-#pragma mark -
-#pragma mark StringFromDate methods
+// MARK: -
+// MARK: StringFromDate methods
 
 /*! Return a string representation of a given date.
     This method returns (if possible) a representation of the given date with the dateFormat of the CPDateFormatter, otherwise it takes the dateStyle and timeStyle
@@ -1160,8 +1160,8 @@ var _separatorsCharacterSet = nil;
 }
 
 
-#pragma mark -
-#pragma mark datefromString
+// MARK: -
+// MARK: datefromString
 
 /*! Return a date of the given string
     This method returns (if possible) a representation of the given string with the dateFormat of the CPDateFormatter, otherwise it takes the dateStyle and timeStyle
@@ -1290,6 +1290,18 @@ var _separatorsCharacterSet = nil;
     // Interpret @"" as the date 2000-01-01 00:00:00 +0000, like in Cocoa. No idea why they picked this particular date.
     if (!aString)
         return [[CPDate alloc] initWithTimeIntervalSinceReferenceDate:-31622400];
+
+    // Special case for ISO8601 format, which is poorly handled by the generic parser.
+    if (aFormat === @"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") {
+        var d = new Date(aString);
+        if (d && !isNaN(d.getTime())) {
+            // The native JS Date object handles ISO 8601 strings correctly (as UTC).
+            // We can create a CPDate directly from the resulting timestamp.
+            var kCFAbsoluteTimeIntervalSince1970 = 978307200.0;
+            var interval = (d.getTime() / 1000.0) - kCFAbsoluteTimeIntervalSince1970;
+            return [CPDate dateWithTimeIntervalSinceReferenceDate:interval];
+        }
+    }
 
     if (aFormat == nil)
         return nil;
@@ -1910,8 +1922,8 @@ var _separatorsCharacterSet = nil;
 }
 
 
-#pragma mark -
-#pragma mark Utils
+// MARK: -
+// MARK: Utils
 
 - (CPString)_stringValueForValue:(id)aValue length:(int)length
 {
